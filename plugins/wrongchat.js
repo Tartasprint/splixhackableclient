@@ -1114,7 +1114,7 @@ function getPlayer(e, t) {
         doHonk: function (e) {
             this.honkTimer = 0,
                 this.honkMaxTime = e,
-                "joris" == this.name.toLowerCase() && (null == honkSfx && (honkSfx = new Audio("/static/honk.mp3")), honkSfx.play());
+                "joris" == this.name.toLowerCase() && (null == honkSfx && (honkSfx = new Audio("../client/static/honk.mp3")), honkSfx.play());
             wcMsgHonkHandler(this, e);
         },
         moveRelativeToServerPosNextFrame: !1,
