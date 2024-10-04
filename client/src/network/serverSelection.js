@@ -6,7 +6,7 @@ async function initServerSelection() {
 	} else {
 		const url = new URL(location.href);
 		url.pathname = "/servermanager/gameservers";
-		endPoint = url.href;
+		endPoint = "http://localhost:8080/servermanager/gameservers"//url.href;
 	}
 
 	const response = await fetch(endPoint);
