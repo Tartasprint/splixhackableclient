@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>splix.io</title>
+    <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+    <meta content="utf-8" http-equiv="encoding">
+    <link rel="stylesheet" href="./static/style.css" />
+    <script src="./src/network/serverSelection.js"></script>
+    <script src="./src/globals.js"></script>
+    <script src="./src/main.js"></script>
+    <script src="../plugins/keyboard.js"></script>
+    <script src="../plugins/flags.js"></script>
+    <script src="../plugins/wrongchat.js" defer></script>
+    <script src="../plugins/zoom.js" defer></script>
+    <script src="../lib/main.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=0.8, maximum-scale=0.8, user-scalable=no" />
+    <meta name="description" content="The not so latest trend in io games. Conquer as much land as possible and try to become biggest of them all. It's not a bowl." />
+    <meta name="keywords" content="splixio, splix.io, online multiplayer, strategy, game, strategy game, io games, agar.io, multiplayer, conquer, conquer land, capture, games, fun, massive multiplayer, web browser games, html5, flash, web game">
+    <link rel="icon" type="image/png" href="./static/img/favicon-196x196.png" sizes="196x196" />
+    <link rel="icon" type="image/png" href="./static/img/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/png" href="./static/img/favicon-32x32.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="./static/img/favicon-16x16.png" sizes="16x16" />
+    <link rel="icon" type="image/png" href="./static/img/favicon-128.png" sizes="128x128" />
+  </head>
+  <body ontouchstart="">
+    <div id="touchControls" style="display: none;"></div>
+    <div id="patreonOverlay" style="display: none;">
+      <div id="patreonBox" class="fancyBox greenBox">
+        <h2 style="margin-top: 0;">Thank you for pledging!</h2>
+        <p>Just one step left, log in with patreon to claim your reward</p>
+        <a class="fancyBox fancyBtn" href="javascript:loginWithPatreon()">Log in with Patreon</a>
+      </div>
+    </div>
+    <div id="beginScreen">
+      <canvas id="logoCanvas"></canvas><br>
+      <div id="notification" style="display: none;"></div>
+      <div id="lastStats" style="display: none;">
+        <div id="lastStatsLeft" class="lastStatsBlock" style="text-align: right;">Last game:</div>  <div id="lastStatsRight" class="lastStatsBlock" style="text-align: left;"></div>
+      </div>
+      <div id="bestStats" style="display: none;">
+        <div id="bestStatsLeft" class="lastStatsBlock" style="text-align: right;">Best game:</div>  <div id="bestStatsRight" class="lastStatsBlock" style="text-align: left;"></div>
+      </div>
+      <div id="preroll" style="display: none;">
+      </div>
+      <form id="nameForm" class="fancyBox greenBox" method="get">
+        <input type="text" class="fancyBox inputFancy" maxlength="20" id="nameInput" placeholder="Enter your name"/><br>
+        <select id="serverSelect" disabled class="fancyBox inputFancy">
+          <option>Loading...</option>
+        </select>
+        <input type="submit" disabled class="fancyBox fancyBtn" id="joinButton" value="Join" />
+      </form>
+      <br><br>
+      <div id="tutorialText" style="opacity: 0;"></div>
+      <canvas id="tutorialCanvas" width="300" height="300"></canvas>
+      <div id="expandPage"></div>
+      <canvas id="skinButton" title="block customization" width="30" height="30"></canvas>
+      <div id="skinButtonShadow"></div>
+      <div id="cornerLinks">
+        <a href="/about">about</a>
+        <a href="/leaderboards">leaderboards</a>
+        <a href="/privacy">privacy</a><br>
+        <a id="qualityText">Quality: high</a><br>
+        <a id="uglyText">Ugly mode: off</a>
+      </div>
+    </div>
+    <div id="skinScreen" style="display: none;">
+      <div class="skinButtonContainer">
+        <div id="prevColor" class="skinButton skinButtonLeft"></div>
+        <div class="skinValue">Color</div>
+        <div id="nextColor" class="skinButton skinButtonRight"></div>
+      </div>
+      <div class="skinButtonContainer">
+        <div id="prevPattern" class="skinButton skinButtonLeft"></div>
+        <div class="skinValue">Pattern</div>
+        <div id="nextPattern" class="skinButton skinButtonRight"></div>
+      </div>
+      <div class="skinButtonContainer">
+        <div class="skinValue" id="skinSave">Save</div>
+      </div>
+      <canvas id="skinScreenCanvas" class="fullscreenCanvas"></canvas>
+    </div>
+    <div id="playUI" style="display: none;">
+      <div id="scoreBlock" class="greenBox">
+        <span>
+          <span>Kills: </span>
+          <span id="myKills" class="rank"></span>
+        </span>
+        <br>
+        <span>Blocks captured: <span id="blockCaptureCount" class="rank"></span></span>
+        <br>
+        <span title="blocks + kills x 500">Score: <span id="score"></span></span>
+        <br>
+        <span>Your rank: <span id="myRank" class="rank"></span> of <span id="totalPlayers" class="rank"></span></span>
+      </div>
+      <div id="leaderboard" class="greenBox">
+      </div>
+      <div id="miniMap" class="greenBox">
+        <div id="miniMapPlayer"></div>
+        <canvas id="minimapCanvas" width="160" height="160" ></canvas>
+      </div>
+      <div id="lifeBox"></div>
+      <div id="topNotifications"></div>
+    </div>
+    <canvas id="transitionCanvas" class="fullscreenCanvas" style="z-index: 1000; display: none;"></canvas>
+    <canvas id="mainCanvas" class="fullscreenCanvas" style="z-index: -100; display: none;"></canvas>
+  </body>
+</html>
