@@ -3,6 +3,7 @@ class KeyboardManager {
         this.shortcuts = new Map();
         this.actions = new Map();
         this.listen=this.listen.bind(this);
+        this.listenup=this.listenup.bind(this);
         this.uitask=[];
         this.active=true;
         this.__visible=false;
@@ -51,15 +52,15 @@ class KeyboardManager {
         this.hideUI();
     }
 
-    add_shortcut(shortcut,action){
+    add_shortcut(shortcut,action,up=undefined){
+        this.shortcuts.set(shortcut,{
+            action: action,
+            ...(up && {up}),
+        });
         this.taskUI(()=>{
             const row = this.ui.body.insertRow()
             row.insertCell().innerText = shortcut;
             row.insertCell().innerText = action;
-            this.shortcuts.set(shortcut,{
-                action: action,
-                row: row,
-            });
         })
     }
 
@@ -90,6 +91,21 @@ class KeyboardManager {
         let action = this.shortcuts.get(Shortcut.from_event(e).serialize());
         if(action === undefined) return;
         action = this.actions.get(action.action);
+        if(action === undefined) return;
+        action();
+    }
+
+    /**
+     * 
+     * @param {KeyboardEvent} e
+     */
+    listenup(e) {
+        if(!this.active) return;
+        let action = this.shortcuts.get(Shortcut.from_event(e).serialize());
+        if(action === undefined) return;
+        if(action.up === undefined) return;
+        console.log('Up we go:', action.up);
+        action = this.actions.get(action.up);
         if(action === undefined) return;
         action();
     }
@@ -172,16 +188,29 @@ let core_actions = [
     ["move_right", ()=>{sendDir(Direction.RIGHT)}],
     ["move_left", ()=>{sendDir(Direction.LEFT)}],
     ["move_pause", ()=>{sendDir(Direction.PAUSE)}],
+    ["core_move_active_up",()=>{activateDir(Direction.UP)}],
+    ["core_move_active_down", ()=>{activateDir(Direction.DOWN)}],
+    ["core_move_active_right", ()=>{activateDir(Direction.RIGHT)}],
+    ["core_move_active_left", ()=>{activateDir(Direction.LEFT)}],
+    ["core_move_active_pause", ()=>{activateDir(Direction.PAUSE)}],
+    ["core_move_deactive_up",()=>{deactivateDir(Direction.UP)}],
+    ["core_move_deactive_down", ()=>{deactivateDir(Direction.DOWN)}],
+    ["core_move_deactive_right", ()=>{deactivateDir(Direction.RIGHT)}],
+    ["core_move_deactive_left", ()=>{deactivateDir(Direction.LEFT)}],
+    ["core_move_deactive_pause", ()=>{deactivateDir(Direction.PAUSE)}],
 ];
+
+
+
 for(const a of core_actions){
     window.hc.km.add_action(...a);
 }
 let core_shortcuts = [
-    ["ArrowUp","move_up"],
-    ["ArrowDown","move_down"],
-    ["ArrowRight","move_right"],
-    ["ArrowLeft","move_left"],
-    ["KeyP","move_pause"],
+    ["ArrowUp","core_move_active_up","core_move_deactive_up"],
+    ["ArrowDown","core_move_active_down","core_move_deactive_down"],
+    ["ArrowRight","core_move_active_right","core_move_deactive_right"],
+    ["ArrowLeft","core_move_active_left","core_move_deactive_left"],
+    ["KeyP","core_move_active_pause","core_move_deactive_pause"],
 ];
 for(const a of core_shortcuts){
     window.hc.km.add_shortcut(...a);
@@ -204,4 +233,5 @@ document.addEventListener('DOMContentLoaded', ()=>{
     window.hc.km.makeUI();
     document.body.append(window.hc.km.ui.main);
     document.body.addEventListener('keydown',window.hc.km.listen);
+    document.body.addEventListener('keyup',window.hc.km.listenup);
 })
