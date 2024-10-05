@@ -69,34 +69,16 @@ var wcFlagList = [
         "caption": "Blocked players",
         "description": "List of blocked players in JSON format.<br>Clear the field if you want to clear the list.",
         "type": "text",
-        "default": {}
+        "default": {},
+        "store": flagTalkers.JSON.from,
+        "restore": flagTalkers.JSON.into,
+        "interpret": flagTalkers.JSON.into,
+        "present": flagTalkers.JSON.from,
     },
 ];
- 
-(function wcGetFlags() {
-    for (var i = 0; i < wcFlagList.length; i++) {
-        var value = localStorage.getItem(wcFlagList[i].name);
-        if (value !== null) {
-            if (wcFlagList[i].type == "number") {
-                value = Number.parseInt(value);
-                if (Number.isNaN(value)) {
-                    value = wcFlagList[i].default;
-                }
-            }
-            else if (wcFlagList[i].type == "checkbox") {
-                value = (value == "true");
-            }
-            else if (wcFlagList[i].type == "text" && wcFlagList[i].name == "wcBlockedPlayers") {
-                wcLoadBlockedPlayers();
-                continue;
-            }
-        }
-        else {
-            value = wcFlagList[i].default;
-        }
-        wcFlags[wcFlagList[i].name] = value;
-    }
-}());
+for( const flag of wcFlagList){
+    window.hc.flags.addFlag(flag);
+}
 if (window.location.pathname == "/client/flags.html") {
     (function wcFlagListAddControls() {
         addHTML('<h4 style="margin-top: 1.5em; margin-bottom: 1em">Wrong Chat Flags</h4>', 'body');
@@ -1374,7 +1356,7 @@ var msgDivs = [];
 var notifDivs = [];
 var wsMsgSendStatus = 0;
 var chatVisible = true;
-var showPrivacyWarning = wcFlags.wcPrivacyWarnings;
+var showPrivacyWarning = hc.flags._.wcPrivacyWarnings;
 removeExtraMessages();
  
 function wcPrivacyWarning() {
@@ -1395,8 +1377,8 @@ function wcNewMessage(honkMsg, name, colorId) {
     var color = bgColorById(colorId);
     var text = wcCompatibleReplace(honkMsgToString(honkMsg));
     var trimName = name.trim();
-    if (wcFlags.wcConsoleLog) {
-        console.log(new Date().toLocaleTimeString(wcFlags.wcConsoleLogTimeAmPm ? "en-US" : "en-GB", { timeStyle: "short" }) + " " +
+    if (hc.flags._.wcConsoleLog) {
+        console.log(new Date().toLocaleTimeString(hc.flags._.wcConsoleLogTimeAmPm ? "en-US" : "en-GB", { timeStyle: "short" }) + " " +
             (trimName === "" ? `(${colorNameById(colorId)})` : trimName) + ": " + text);
     }
  
@@ -1415,18 +1397,18 @@ function wcNewMessage(honkMsg, name, colorId) {
     msgDiv.appendChild(msgSpanText);
     chatMessages.appendChild(msgDiv);
     msgDivs.unshift(msgDiv);
-    if (wcFlags.wcMsgDisplayTime !== 0) {  // don't delete at all if 0. But will be deleted if limit reached
+    if (hc.flags._.wcMsgDisplayTime !== 0) {  // don't delete at all if 0. But will be deleted if limit reached
         setTimeout(function () {
-            msgDiv.style.transition = `opacity ${wcFlags.wcMsgDecayTime <= wcFlags.wcMsgDisplayTime ? wcFlags.wcMsgDecayTime : wcFlags.wcMsgDisplayTime}s ease-in-out`;
+            msgDiv.style.transition = `opacity ${hc.flags._.wcMsgDecayTime <= hc.flags._.wcMsgDisplayTime ? hc.flags._.wcMsgDecayTime : hc.flags._.wcMsgDisplayTime}s ease-in-out`;
             msgDiv.style.opacity = "0";
-        }, (wcFlags.wcMsgDecayTime < wcFlags.wcMsgDisplayTime ? wcFlags.wcMsgDisplayTime - wcFlags.wcMsgDecayTime : 0.1) * 1000);
+        }, (hc.flags._.wcMsgDecayTime < hc.flags._.wcMsgDisplayTime ? hc.flags._.wcMsgDisplayTime - hc.flags._.wcMsgDecayTime : 0.1) * 1000);
         setTimeout(function () {
             var index = msgDivs.indexOf(msgDiv);
             if (index != -1) {
                 msgDiv.remove();
                 msgDivs.splice(index, 1);
             }
-        }, wcFlags.wcMsgDisplayTime * 1000);
+        }, hc.flags._.wcMsgDisplayTime * 1000);
     }
 }
  
@@ -1468,7 +1450,7 @@ function wcNewNotification(text, timeAlive = 4, type = 0) {
     if (timeAlive == undefined) {
         timeAlive = 4;
     }
-    if (wcFlags.wcDefaultNotifications) {
+    if (hc.flags._.wcDefaultNotifications) {
         showTopNotification(text, timeAlive);
     }
     else {
@@ -1477,13 +1459,13 @@ function wcNewNotification(text, timeAlive = 4, type = 0) {
 }
  
 function removeExtraMessages() {
-    if (msgDivs.length > wcFlags.wcMessageLimit) {
-        for (var i = msgDivs.length - 1; i > wcFlags.wcMessageLimit; i--) {
+    if (msgDivs.length > hc.flags._.wcMessageLimit) {
+        for (var i = msgDivs.length - 1; i > hc.flags._.wcMessageLimit; i--) {
             msgDivs[i].remove();
             msgDivs.splice(i);
         }
     }
-    setTimeout(removeExtraMessages, 2000);
+    setTimeout(removeExtraMessages, 5000000000);//TODO
 }
  
 function hideChatInput() {
@@ -1525,11 +1507,11 @@ function toggleChat() {
 }
  
 function wcIsPlayerBlocked(name, colorId) {
-    if (!(name in wcFlags.wcBlockedPlayers)) {
+    if (!(name in hc.flags._.wcBlockedPlayers)) {
         return false;
     }
     else {
-        for (const one of wcFlags.wcBlockedPlayers[name]) {
+        for (const one of hc.flags._.wcBlockedPlayers[name]) {
             if (one.until > Date.now() && (!('colorId' in one) || one.colorId == colorId)) {
                 return true;
             }
@@ -1541,21 +1523,21 @@ function wcIsPlayerBlocked(name, colorId) {
 function wcBlockPlayer(name, until, colorId = -1) {
     wcLoadBlockedPlayers(false);
  
-    if (!(name in wcFlags.wcBlockedPlayers)) {
-        wcFlags.wcBlockedPlayers[name] = [];
+    if (!(name in hc.flags._.wcBlockedPlayers)) {
+        hc.flags._.wcBlockedPlayers[name] = [];
     }
  
     if (colorId === -1) {
-        wcFlags.wcBlockedPlayers[name].push({ 'until': until });
+        hc.flags._.wcBlockedPlayers[name].push({ 'until': until });
     }
     else {
-        wcFlags.wcBlockedPlayers[name].push({ 'until': until, 'colorId': colorId });
+        hc.flags._.wcBlockedPlayers[name].push({ 'until': until, 'colorId': colorId });
     }
     wcSaveBlockedPlayers();
 }
  
 function wcSaveBlockedPlayers() {
-    localStorage.setItem("wcBlockedPlayers", JSON.stringify(wcFlags.wcBlockedPlayers));
+    localStorage.setItem("wcBlockedPlayers", JSON.stringify(hc.flags._.wcBlockedPlayers));
 }
  
 function wcLoadBlockedPlayers(saveIfChanged = true) {
@@ -1599,7 +1581,7 @@ function wcLoadBlockedPlayers(saveIfChanged = true) {
         }
     }
  
-    wcFlags.wcBlockedPlayers = parsedBlockedPlayers;
+    hc.flags._.wcBlockedPlayers = parsedBlockedPlayers;
  
     if (saveIfChanged && wasChanged) {
         wcSaveBlockedPlayers();
@@ -1771,7 +1753,7 @@ chatInput.addEventListener('keydown', function (e) {
         }
         else {
             if (wsMsgSendStatus === 0) {
-                var message = wcFlags.wcConvertEmoticons ? strToHonkMsg(wcEmoticonsToEmoji(chatInput.value)) : strToHonkMsg(chatInput.value);
+                var message = hc.flags._.wcConvertEmoticons ? strToHonkMsg(wcEmoticonsToEmoji(chatInput.value)) : strToHonkMsg(chatInput.value);
                 if (typeof (message) == "number") {
                     if (message == 0) {
                         wcNewNotification("Message length is 0");

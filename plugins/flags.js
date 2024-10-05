@@ -5,13 +5,25 @@ class Flag {
         this.input.type=input;
         this.input.name='hcFlag'+id;
         this.input.dataset.id=id;
-        this.value = this.value || init;
+        this.defaultValue = init;
         this.__visible = false;
+        this.store=options.store || (x=>({"v":x, ok: true}));
+        this.restore=options.restore;
+        if(this.restore === undefined){
+            if(input === "number"){
+                this.restore = v => {
+                    let x = Number.parseInt(v);
+                    return Number.isNaN(x) ? {"v": undefined, "ok": false}:{"v":x, "ok":true};
+                }
+            } else if(input === "checkbox"){
+                this.restore = v => ({"ok":true, "v": v==="true"});
+            }
+        }
+        this.interpret=options.interpret || (x=>({"v":x, ok: true}));
+        this.present=options.present || (x=>({"v":x, ok: true}));
+        this.value=this.getLocalStorage();
         this.input.addEventListener('change', ()=>{
-            this.value = ((input !== 'checkbox' && input !== 'number') && this.input.value)
-            || (input === 'checkbox' && this.input.checked)
-            || (input === 'number' &&
-                (!Number.isNaN(this.input.valueAsNumber) ? this.input.valueAsNumber : init));
+            this.value=this.getUI();
         })
         this.label=document.createElement('label');
         this.label.htmlFor=this.input.name;
@@ -24,21 +36,24 @@ class Flag {
         } else {
             this.context = null;
         }
-        this.serialize=options.serialize;
-        this.deserialize=options.serialize;
         if(input === 'checkbox'){
             window.hc.km.add_action('flags_toggleFlag_'+id,()=>{
                 this.value=this.value==="false";
             });
         } else if(input === 'number'){
             if(options.min !== undefined) this.input.min = options.min;
-            if(options.max !== undefined) this.input.max = options.min;
+            if(options.max !== undefined) this.input.max = options.max;
         }
     }
 
-    set value(v){
-        if(this.serialize !== undefined) v=this.serialize(v)
-        localStorage.setItem(this.id,v);
+    setLocalStorage(val){
+        let {v,ok} = this.store(val);
+        localStorage.setItem(this.id,ok?v:this.store(this.defaultValue).v);
+    }
+
+    setUI(val){
+        let {v,ok} = this.present(val);
+        v=ok?v:this.present(this.defaultValue).v;
         if(this.input.type === 'checkbox'){
             this.input.checked = v;
         } else {
@@ -46,21 +61,89 @@ class Flag {
         }
     }
 
+    getLocalStorage(){
+        let s = localStorage.getItem(this.id);
+        let value;
+        if(s === null) {
+            console.log(s);
+            v = this.defaultValue;
+            this.value = this.defaultValue;
+        } else {
+            console.log(s);
+            let {v, ok} =this.restore(s);
+            value = ok ? v : (this.value = this.defaultValue);
+        }
+        return value;
+    }
+
+    getUI(){
+        let v;
+        if(this.input.type === 'checkbox'){
+            v = this.input.checked;
+        } else if(this.input.type === 'number') {
+            v = !Number.isNaN(this.input.valueAsNumber) ? this.input.valueAsNumber : (this.value=this.defaultValue);
+        } else {
+            v = this.input.value;
+        }
+        v=this.interpret(v);
+        return v.ok ? v.v:(this.value=this.defaultValue);
+    }
+
+    set value(v){
+        this.setLocalStorage(v);
+        this.setUI(v);
+    }
+
     get value(){
-        let v = localStorage.getItem(this.id);
-        if(this.deserialize !== undefined) v=this.deserialize(v);
-        return v;
+        return this.getLocalStorage();
+    }
+}
+
+const flagTalkers = {
+    JSON: {
+        from: x => {
+            let ok = true;
+            let v = undefined;
+            try {
+                v = JSON.stringify(x);
+            } catch (e) {
+                ok = false;
+            }
+            return {v, ok};
+        },
+        into: x => {
+            let ok = true;
+            let v = undefined;
+            try {
+                v = JSON.parse(x);
+            } catch (e) {
+                ok = false;
+            }
+            return {v, ok};
+        }
     }
 }
 
 class FlagEditor {
     constructor(){
-        this.flags=[];
+        this.flags= new Map();
         this.ui = {
             container: document.createElement('ul'),
         }
         this.ui.container.classList.add('hc-flags-container');
         this.hideUI();
+        let that=this;
+        this._ = new Proxy({}, {
+            get(target,name){
+                let f= that.flags.get(name);
+                let v =f.value;
+                console.log('Getting', name, f, v)
+                return v;
+            },
+            set(target,name,value){
+                console.log(value);
+                that.flags.get(name).value=value;
+            }});
     }
 
     addFlag({
@@ -73,7 +156,7 @@ class FlagEditor {
     } = params){
         const li = document.createElement('li');
         li.classList.add('hc-flags-flag');
-        this.flags.push(new Flag(li,id,input,init,label,context,options));
+        this.flags.set(id,new Flag(li,id,input,init,label,context,options));
         this.ui.container.append(li);
     }
 
