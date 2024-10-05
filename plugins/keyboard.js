@@ -188,6 +188,8 @@ let core_actions = [
     ["move_right", ()=>{sendDir(Direction.RIGHT)}],
     ["move_left", ()=>{sendDir(Direction.LEFT)}],
     ["move_pause", ()=>{sendDir(Direction.PAUSE)}],
+    ["start_honk", ()=>{honkStart()}],
+    ["end_honk", ()=>{honkEnd()}],
     ["core_move_active_up",()=>{activateDir(Direction.UP)}],
     ["core_move_active_down", ()=>{activateDir(Direction.DOWN)}],
     ["core_move_active_right", ()=>{activateDir(Direction.RIGHT)}],
@@ -211,6 +213,7 @@ let core_shortcuts = [
     ["ArrowRight","core_move_active_right","core_move_deactive_right"],
     ["ArrowLeft","core_move_active_left","core_move_deactive_left"],
     ["KeyP","core_move_active_pause","core_move_deactive_pause"],
+    ["Space","start_honk","end_honk"],
 ];
 for(const a of core_shortcuts){
     window.hc.km.add_shortcut(...a);
