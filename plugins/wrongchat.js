@@ -1055,83 +1055,21 @@ function honkEnd() {
         }
     }
 }
- 
-function getPlayer(e, t) {
-    var n;
-    void 0 === t && (t = players);
-    for (var a = 0; a < t.length; a++)
-        if ((n = t[a]).id == e)
-            return n;
-    return n = {
-        id: e,
-        pos: [0, 0],
-        drawPos: [-1, -1],
-        drawPosSet: !1,
-        serverPos: [0, 0],
-        dir: 0,
-        isMyPlayer: 0 === e,
-        isDead: !1,
-        deathWasCertain: !1,
-        didUncertainDeathLastTick: !1,
-        isDeadTimer: 0,
-        uncertainDeathPosition: [0, 0],
-        message: "",
-        msgStatus: 0,
-        msgLength: 0,
-        die: function (e) {
-            if (e = !!e, this.isDead)
-                this.deathWasCertain = e || this.deathWasCertain;
-            else if (e || !this.didUncertainDeathLastTick) {
-                e || (this.didUncertainDeathLastTick = !0, this.uncertainDeathPosition = [this.pos[0], this.pos[1]]),
-                    this.isDead = !0,
-                    this.deathWasCertain = e,
-                    this.deadAnimParts = [0],
-                    this.isDeadTimer = 0,
-                    this.isMyPlayer && doCamShakeDir(this.dir);
-                for (var t = 0; ;) {
-                    if ((t += .4 * Math.random() + .5) >= 2 * Math.PI) {
-                        this.deadAnimParts.push(2 * Math.PI);
-                        break
-                    }
-                    this.deadAnimParts.push(t),
-                        this.deadAnimPartsRandDist.push(Math.random())
-                }
-            }
-        },
-        undoDie: function () {
-            this.isDead = !1
-        },
-        deadAnimParts: [],
-        deadAnimPartsRandDist: [],
-        addHitLine: function (e, t) {
-            this.hitLines.push({
-                pos: e,
-                vanishTimer: 0,
-                color: t
-            })
-        },
-        hitLines: [],
-        doHonk: function (e) {
-            this.honkTimer = 0,
-                this.honkMaxTime = e,
-                "joris" == this.name.toLowerCase() && (null == honkSfx && (honkSfx = new Audio("../client/static/honk.mp3")), honkSfx.play());
-            wcMsgHonkHandler(this, e);
-        },
-        moveRelativeToServerPosNextFrame: !1,
-        lastServerPosSentTime: 0,
-        honkTimer: 0,
-        honkMaxTime: 0,
-        trails: [],
-        name: "",
-        skinBlock: 0,
-        lastBlock: null,
-        hasReceivedPosition: !1
-    },
-        t.push(n),
-        n.isMyPlayer && (myPlayer = n),
-        n
+
+
+class WCPlayer extends Player {
+    constructor(id){
+        super(id);
+        this.message = "";
+        this.msgStatus = 0;
+        this.msgLength = 0;
+        this.addEventListener('honk', (e) => {
+            wcMsgHonkHandler(this,e.detail)
+        });
+    }
 }
- 
+
+Player = WCPlayer;
 honkEnd = honkEnd;
  
 var style = `

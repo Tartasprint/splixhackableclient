@@ -756,6 +756,88 @@ function getBlock(x, y, array) {
 	return block;
 }
 
+class Player extends EventTarget {
+	constructor(id){
+		super();
+		this.id = id;
+		this.pos = [0,0];
+		this.drawPos = [-1,-1];
+		this.drawPosSet = false;
+		this.serverPos= [0, 0];
+		this.dir= 0;
+		this.isMyPlayer= id === 0;
+		this.isDead= false;
+		this.deathWasCertain= false;
+		this.didUncertainDeathLastTick= false;
+		this.isDeadTimer= 0;
+		this.uncertainDeathPosition= [0, 0];
+		this.deadAnimParts= [];
+		this.deadAnimPartsRandDist= [];
+		this.hitLines= [];
+		this.moveRelativeToServerPosNextFrame= false; //if true, lastServerPosSentTime will be used instead of deltatime for one frame
+		this.lastServerPosSentTime= 0;
+		this.honkTimer= 0;
+		this.honkMaxTime= 0;
+		this.trails= [];
+		this.name= "";
+		this.skinBlock= 0;
+		this.lastBlock= null;
+		this.hasReceivedPosition= false;
+	}
+	die(deathWasCertain) {
+		deathWasCertain = !!deathWasCertain;
+		if (this.isDead) {
+			this.deathWasCertain = deathWasCertain || this.deathWasCertain;
+		} else {
+			if (deathWasCertain || !this.didUncertainDeathLastTick) {
+				if (!deathWasCertain) {
+					this.didUncertainDeathLastTick = true;
+					this.uncertainDeathPosition = [this.pos[0], this.pos[1]];
+				}
+				this.isDead = true;
+				this.deathWasCertain = deathWasCertain;
+				this.deadAnimParts = [0];
+				this.isDeadTimer = 0;
+				if (this.isMyPlayer) {
+					doCamShakeDir(this.dir);
+				}
+				var prev = 0;
+				while (true) {
+					prev += Math.random() * 0.4 + 0.5;
+					if (prev >= Math.PI * 2) {
+						this.deadAnimParts.push(Math.PI * 2);
+						break;
+					}
+					this.deadAnimParts.push(prev);
+					this.deadAnimPartsRandDist.push(Math.random());
+				}
+			}
+		}
+	}
+	undoDie() {
+			this.isDead = false;
+	}
+	addHitLine(pos, color) {
+		this.hitLines.push({
+			pos: pos,
+			vanishTimer: 0,
+			color: color,
+		});
+	}
+	doHonk(time) {
+		this.honkTimer = 0;
+		this.honkMaxTime = time;
+		this.dispatchEvent(new CustomEvent('honk', {detail: time}));
+		if (this.name.toLowerCase() == "joris") {
+			if (honkSfx == null) {
+				honkSfx = new Audio("../static/honk.mp3");
+			}
+			honkSfx.play();
+		}
+	}
+}
+
+
 //gets a player from the the specified array,
 //creates it if it doesn't exist yet
 //if array is not specified it will default to the players[] array
@@ -772,82 +854,7 @@ function getPlayer(id, array) {
 	}
 
 	//player doesn't exist, create it
-	player = {
-		id: id,
-		pos: [0, 0],
-		drawPos: [-1, -1],
-		drawPosSet: false,
-		serverPos: [0, 0],
-		dir: 0,
-		isMyPlayer: id === 0,
-		isDead: false,
-		deathWasCertain: false,
-		didUncertainDeathLastTick: false,
-		isDeadTimer: 0,
-		uncertainDeathPosition: [0, 0],
-		die: function (deathWasCertain) {
-			deathWasCertain = !!deathWasCertain;
-			if (this.isDead) {
-				this.deathWasCertain = deathWasCertain || this.deathWasCertain;
-			} else {
-				if (deathWasCertain || !this.didUncertainDeathLastTick) {
-					if (!deathWasCertain) {
-						this.didUncertainDeathLastTick = true;
-						this.uncertainDeathPosition = [this.pos[0], this.pos[1]];
-					}
-					this.isDead = true;
-					this.deathWasCertain = deathWasCertain;
-					this.deadAnimParts = [0];
-					this.isDeadTimer = 0;
-					if (this.isMyPlayer) {
-						doCamShakeDir(this.dir);
-					}
-					var prev = 0;
-					while (true) {
-						prev += Math.random() * 0.4 + 0.5;
-						if (prev >= Math.PI * 2) {
-							this.deadAnimParts.push(Math.PI * 2);
-							break;
-						}
-						this.deadAnimParts.push(prev);
-						this.deadAnimPartsRandDist.push(Math.random());
-					}
-				}
-			}
-		},
-		undoDie: function () {
-			this.isDead = false;
-		},
-		deadAnimParts: [],
-		deadAnimPartsRandDist: [],
-		addHitLine: function (pos, color) {
-			this.hitLines.push({
-				pos: pos,
-				vanishTimer: 0,
-				color: color,
-			});
-		},
-		hitLines: [],
-		doHonk: function (time) {
-			this.honkTimer = 0;
-			this.honkMaxTime = time;
-			if (this.name.toLowerCase() == "joris") {
-				if (honkSfx == null) {
-					honkSfx = new Audio("../static/honk.mp3");
-				}
-				honkSfx.play();
-			}
-		},
-		moveRelativeToServerPosNextFrame: false, //if true, lastServerPosSentTime will be used instead of deltatime for one frame
-		lastServerPosSentTime: 0,
-		honkTimer: 0,
-		honkMaxTime: 0,
-		trails: [],
-		name: "",
-		skinBlock: 0,
-		lastBlock: null,
-		hasReceivedPosition: false,
-	};
+	player = new Player(id);
 	array.push(player);
 	if (player.isMyPlayer) {
 		myPlayer = player;
