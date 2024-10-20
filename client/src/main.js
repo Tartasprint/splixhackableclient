@@ -162,7 +162,7 @@ var skinCanvas, skinCtx, skinScreen, skinScreenVisible = false, skinScreenBlocks
 var titCanvas, titCtx, titleTimer = -1, resetTitleNextFrame = true, titleLastRender = 0;
 var currentTouches = [], doRefreshAfterDie = false, pressedKeys = [];
 var camPosOffset = [0, 0], camRotOffset = 0, camShakeForces = [];
-var honkStartTime, lastHonkTime = 0, honkSfx = null;
+var honkStartTime = undefined, lastHonkTime = 0, honkSfx = null;
 var skipDeathTransition = false, allowSkipDeathTransition = false, deathTransitionTimeout = null;
 var thisServerAvgPing = 0,
 	thisServerDiffPing = 0,
@@ -1127,15 +1127,19 @@ function trailPush(player, pos) {
 }
 
 function honkStart() {
-	honkStartTime = Date.now();
+	if(honkStartTime === undefined){
+		honkStartTime = Date.now();
+	}
 }
 
 function honkEnd() {
+	console.log("Honking");
 	var now = Date.now();
-	if (now > lastHonkTime) {
+	if (now > lastHonkTime && honkStartTime !== undefined) {
 		var time = now - honkStartTime;
 		time = clamp(time, 0, 1000);
 		lastHonkTime = now + time;
+		honkStartTime = undefined;
 		time = iLerp(0, 1000, time);
 		time *= 255;
 		time = Math.floor(time);
@@ -4213,16 +4217,7 @@ function setUglyText() {
 }
 
 function toggleUglyMode() {
-	switch (localStorage.uglyMode) {
-		case "true":
-			lsSet("uglyMode", "false");
-			break;
-		case "false":
-		default:
-			lsSet("uglyMode", "true");
-			break;
-	}
-	setUglyText();
+	window.hc.flags.toggle('uglyMode')
 }
 
 function updateUglyMode() {

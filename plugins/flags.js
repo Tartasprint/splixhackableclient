@@ -1,5 +1,6 @@
-class Flag {
+class Flag  extends EventTarget {
     constructor(container,id,input,init,label,context, options){
+        super();
         this.id=id;
         this.input=document.createElement('input');
         this.input.type=input;
@@ -38,7 +39,7 @@ class Flag {
         }
         if(input === 'checkbox'){
             window.hc.km.add_action('flags_toggleFlag_'+id,()=>{
-                this.value=this.value==="false";
+                this.value=!this.value;
             });
         } else if(input === 'number'){
             if(options.min !== undefined) this.input.min = options.min;
@@ -65,11 +66,9 @@ class Flag {
         let s = localStorage.getItem(this.id);
         let value;
         if(s === null) {
-            console.log(s);
-            v = this.defaultValue;
+            value = this.defaultValue;
             this.value = this.defaultValue;
         } else {
-            console.log(s);
             let {v, ok} =this.restore(s);
             value = ok ? v : (this.value = this.defaultValue);
         }
@@ -92,6 +91,7 @@ class Flag {
     set value(v){
         this.setLocalStorage(v);
         this.setUI(v);
+        this.dispatchEvent(new CustomEvent('change', {detail: v}));
     }
 
     get value(){
@@ -137,7 +137,6 @@ class FlagEditor {
             get(target,name){
                 let f= that.flags.get(name);
                 let v =f.value;
-                console.log('Getting', name, f, v)
                 return v;
             },
             set(target,name,value){
@@ -173,6 +172,17 @@ class FlagEditor {
     hideUI(){
         this.__visible = false;
         this.ui.container.style.display='none';
+    }
+
+    on_change(flag_name, callback){
+        this.flags.get(flag_name).addEventListener('change', ({detail: value}) => callback(value))
+    }
+
+    toggle(flag_name){
+        const flag = this.flags.get(flag_name);
+        if(flag.input.type == "checkbox"){
+            flag.value = !flag.value;
+        }
     }
 }
 
@@ -231,6 +241,13 @@ document.addEventListener('DOMContentLoaded',()=>{
             "default": "false"
         },
         {
+            "name": "leaderboardHidden",
+            "caption": "Hide the leaderboard",
+            "description": "Hides the leaderboard when playing.",
+            "type": "checkbox",
+            "default": "false"
+        },
+        {
             "name": "simulatedLatency",
             "caption": "Simulate latency",
             "description": "This increases the lag, there's absolutely no reason why you would want to enable this unless you're debugging stuff. This is also makes things very unstable so you might want to avoid using it.<br>Set this to 0 to disable it.",
@@ -266,4 +283,14 @@ document.addEventListener('DOMContentLoaded',()=>{
     `)
     window.hc.km.add_action('flags_visibility_toggle', ()=>{window.hc.flags.toggleUI()});
     window.hc.km.add_shortcut('F2','flags_visibility_toggle');
+    window.hc.km.add_shortcut('KeyO','flags_toggleFlag_leaderboardHidden');
+    window.hc.flags.on_change("uglyMode", value => {
+        window.uglyMode=value;
+        window.uglyText.innerHTML = "Ugly mode: " + (value ? "on" : "off");
+    });
+    window.hc.flags.on_change("leaderboardHidden", value => {
+        leaderboardHidden=value;
+        console.log('Changed',value);
+        setLeaderboardVisibility();
+    });
 })

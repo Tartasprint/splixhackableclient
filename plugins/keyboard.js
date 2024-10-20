@@ -90,6 +90,7 @@ class KeyboardManager {
         if(!this.active) return;
         let action = this.shortcuts.get(Shortcut.from_event(e).serialize());
         if(action === undefined) return;
+        console.log('Down we go:', action);
         action = this.actions.get(action.action);
         if(action === undefined) return;
         action();

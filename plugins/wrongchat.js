@@ -1019,24 +1019,6 @@ function wcMsgHonkHandler(player, value) {
         }
     }
 }
- 
-function honkEnd() {
-    if (wsMsgSendStatus === 0) {
-        var e = Date.now();
-        if (lastHonkTime < e) {
-            var t = clamp(t = e - honkStartTime, 0, 1e3);
-            lastHonkTime = e + t,
-                t = iLerp(0, 1e3, t),
-                t *= 255,
-                t = Math.floor(t),
-                wsSendMsg(sendAction.HONK, t);
-            for (var n = 0; n < players.length; n++) {
-                var a = players[n];
-                a.isMyPlayer && a.doHonk(Math.max(70, t))
-            }
-        }
-    }
-}
 
 
 class WCPlayer extends Player {
@@ -1412,11 +1394,6 @@ function wcNewMessage(honkMsg, name, colorId) {
     }
 }
  
-function showTopNotification(text, timeAlive = 4) {
-    var notification = doTopNotification(text);
-    setTimeout(function () { notification.animateOut(); notification.destroy(); }, timeAlive * 1000);
-}
- 
 function wcNewCornerNotification(text, timeAlive = 4, type = 0) {
     var notifDiv = document.createElement("div");
     notifDiv.classList.add("chatNotification");
@@ -1465,7 +1442,7 @@ function removeExtraMessages() {
             msgDivs.splice(i);
         }
     }
-    setTimeout(removeExtraMessages, 5000000000);//TODO
+    setTimeout(removeExtraMessages, 2000);
 }
  
 function hideChatInput() {
