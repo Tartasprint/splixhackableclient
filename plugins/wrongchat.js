@@ -1360,7 +1360,7 @@ function wcNewMessage(honkMsg, name, colorId) {
     var text = wcCompatibleReplace(honkMsgToString(honkMsg));
     var trimName = name.trim();
     if (hc.flags._.wcConsoleLog) {
-        console.log(new Date().toLocaleTimeString(hc.flags._.wcConsoleLogTimeAmPm ? "en-US" : "en-GB", { timeStyle: "short" }) + " " +
+        console.info(new Date().toLocaleTimeString(hc.flags._.wcConsoleLogTimeAmPm ? "en-US" : "en-GB", { timeStyle: "short" }) + " " +
             (trimName === "" ? `(${colorNameById(colorId)})` : trimName) + ": " + text);
     }
  

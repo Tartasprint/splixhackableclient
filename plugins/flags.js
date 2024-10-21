@@ -135,14 +135,19 @@ class FlagEditor {
         let that=this;
         this._ = new Proxy({}, {
             get(target,name){
+                if(!that.flags.has(name)){throw new Error(`The flag ${name} does not exist.`);}
                 let f= that.flags.get(name);
                 let v =f.value;
                 return v;
             },
             set(target,name,value){
-                console.log(value);
                 that.flags.get(name).value=value;
-            }});
+                return(true);
+            },
+            has(target,name){
+                return that.flags.has(name);
+            }
+        });
     }
 
     addFlag({
@@ -260,7 +265,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             "description": "Check if you do not want to use ads.",
             "type": "checkbox",
             "default": "true"
-        }
+        },
     ]
     for(const flag of flags){
         window.hc.flags.addFlag(flag);
@@ -290,7 +295,6 @@ document.addEventListener('DOMContentLoaded',()=>{
     });
     window.hc.flags.on_change("leaderboardHidden", value => {
         leaderboardHidden=value;
-        console.log('Changed',value);
         setLeaderboardVisibility();
     });
 })
