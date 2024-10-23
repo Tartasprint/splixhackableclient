@@ -316,6 +316,14 @@ function isIframe() {
 	}
 }
 
+class Stats {
+	blocks = 0;
+	kills = 0;
+	leaderboard_rank = 0;
+	alive = 0;
+	no1_time = 0;
+}
+
 // Some dated code is using these in places like `for(i = 0`.
 // While ideally these variables should all be made local,
 // I'm worried some locations actually rely on them not being local.
@@ -393,13 +401,10 @@ var lastMyPosSetClientSideTime = 0,
 	lastMyPosHasBeenConfirmed = false;
 var uiElems = [], zoom, myColorId, uglyMode = false;
 var hasReceivedChunkThisGame = false, didSendSecondReady = false;
-var lastStatBlocks = 0,
-	lastStatKills = 0,
-	lastStatLbRank = 0,
-	lastStatAlive = 0,
-	lastStatNo1Time = 0,
-	lastStatDeathType = 0,
+let lastStat = new Stats();
+let lastStatDeathType = 0,
 	lastStatKiller = "";
+let bestStat = new Stats();
 var bestStatBlocks = 0, bestStatKills = 0, bestStatLbRank = 0, bestStatAlive = 0, bestStatNo1Time = 0;
 var lastStatTimer = 0, lastStatCounter = 0, lastStatValueElem, bestStatValueElem;
 var lastMousePos = [0, 0], mouseHidePos = [0, 0];
@@ -1454,7 +1459,7 @@ class GameConnection {
 	 */
 	wsSendMsg(action, data) {
 		let utf8Array;
-		if (this.ws.readyState == WebSocket.OPEN) {
+		if (!!this.ws && this.ws.readyState == WebSocket.OPEN) {
 			const array = [action];
 			if (action == sendAction.UPDATE_DIR) {
 				array.push(data.dir);
@@ -1819,30 +1824,30 @@ class GameConnection {
 		}
 		if (data[0] == receiveAction.YOU_DED) {
 			if (data.length > 1) {
-				lastStatBlocks = bytesToInt(data[1], data[2], data[3], data[4]);
-				if (lastStatBlocks > bestStatBlocks) {
-					bestStatBlocks = lastStatBlocks;
+				lastStat.blocks = bytesToInt(data[1], data[2], data[3], data[4]);
+				if (lastStat.blocks > bestStat.blocks) {
+					bestStat.blocks = lastStat.blocks;
 					lsSet("bestStatBlocks", bestStatBlocks);
 				}
-				lastStatKills = bytesToInt(data[5], data[6]);
-				if (lastStatKills > bestStatKills) {
-					bestStatKills = lastStatKills;
-					lsSet("bestStatKills", bestStatKills);
+				lastStat.kills = bytesToInt(data[5], data[6]);
+				if (lastStat.kills > bestStat.kills) {
+					bestStat.kills = lastStat.kills;
+					lsSet("bestStatKills", bestStat.kills);
 				}
-				lastStatLbRank = bytesToInt(data[7], data[8]);
-				if ((lastStatLbRank < bestStatLbRank || bestStatLbRank <= 0) && lastStatLbRank > 0) {
-					bestStatLbRank = lastStatLbRank;
-					lsSet("bestStatLbRank", bestStatLbRank);
+				lastStat.leaderboard_rank = bytesToInt(data[7], data[8]);
+				if ((lastStat.leaderboard_rank < bestStat.leaderboard_rank || bestStat.leaderboard_rank <= 0) && lastStat.leaderboard_rank > 0) {
+					bestStat.leaderboard_rank = lastStat.leaderboard_rank;
+					lsSet("bestStatLbRank", bestStat.leaderboard_rank);
 				}
-				lastStatAlive = bytesToInt(data[9], data[10], data[11], data[12]);
-				if (lastStatAlive > bestStatAlive) {
-					bestStatAlive = lastStatAlive;
-					lsSet("bestStatAlive", bestStatAlive);
+				lastStat.alive = bytesToInt(data[9], data[10], data[11], data[12]);
+				if (lastStat.alive > bestStat.alive) {
+					bestStat.alive = lastStat.alive;
+					lsSet("bestStatAlive", bestStat.alive);
 				}
-				lastStatNo1Time = bytesToInt(data[13], data[14], data[15], data[16]);
-				if (lastStatNo1Time > bestStatNo1Time) {
-					bestStatNo1Time = lastStatNo1Time;
-					lsSet("bestStatNo1Time", bestStatNo1Time);
+				lastStat.no1_time = bytesToInt(data[13], data[14], data[15], data[16]);
+				if (lastStat.no1_time > bestStat.no1_time) {
+					bestStat.no1_time = lastStat.no1_time;
+					lsSet("bestStatNo1Time", bestStat.no1_time);
 				}
 				lastStatDeathType = data[17];
 				lastStatKiller = "";
@@ -4819,11 +4824,11 @@ function loop(timeStamp) {
 				}
 
 				if (lastStatCounter === 0) {
-					if (lastStatNo1Time <= 0 && bestStatNo1Time <= 0) {
+					if (lastStat.no1_time <= 0 && bestStat.no1_time <= 0) {
 						lastStatCounter++;
 					} else {
-						lastStatValueElem.innerHTML = parseTimeToString(lastStatNo1Time) + " on #1";
-						bestStatValueElem.innerHTML = parseTimeToString(bestStatNo1Time) + " on #1";
+						lastStatValueElem.innerHTML = parseTimeToString(lastStat.no1_time) + " on #1";
+						bestStatValueElem.innerHTML = parseTimeToString(bestStat.no1_time) + " on #1";
 					}
 				}
 				if (lastStatCounter == 1) {
@@ -4835,36 +4840,36 @@ function loop(timeStamp) {
 					}
 				}
 				if (lastStatCounter == 2) {
-					if (lastStatKills <= 0 && bestStatKills <= 0) {
+					if (lastStat.kills <= 0 && bestStat.kills <= 0) {
 						lastStatCounter++;
 					} else {
-						var killsS = lastStatKills == 1 ? "" : "s";
-						lastStatValueElem.innerHTML = lastStatKills + " player" + killsS + " killed";
-						var killsS2 = bestStatKills == 1 ? "" : "s";
-						bestStatValueElem.innerHTML = bestStatKills + " player" + killsS2 + " killed";
+						var killsS = lastStat.kills == 1 ? "" : "s";
+						lastStatValueElem.innerHTML = lastStat.kills + " player" + killsS + " killed";
+						var killsS2 = bestStat.kills == 1 ? "" : "s";
+						bestStatValueElem.innerHTML = bestStat.kills + " player" + killsS2 + " killed";
 					}
 				}
 				if (lastStatCounter == 3) {
-					lastStatValueElem.innerHTML = parseTimeToString(lastStatAlive) + " alive";
+					lastStatValueElem.innerHTML = parseTimeToString(lastStat.alive) + " alive";
 					bestStatValueElem.innerHTML =
-						parseTimeToString(Math.max(lastStatAlive, localStorage.getItem("bestStatAlive"))) + " alive";
+						parseTimeToString(Math.max(lastStat.alive, localStorage.getItem("bestStatAlive"))) + " alive";
 				}
 				if (lastStatCounter == 4) {
-					if (lastStatBlocks <= 0 && bestStatBlocks <= 0) {
+					if (lastStat.blocks <= 0 && bestStat.blocks <= 0) {
 						lastStatCounter++;
 					} else {
-						var blockS = lastStatBlocks == 1 ? "" : "s";
-						lastStatValueElem.innerHTML = lastStatBlocks + " block" + blockS + " captured";
-						var blockS2 = bestStatBlocks == 1 ? "" : "s";
-						bestStatValueElem.innerHTML = bestStatBlocks + " block" + blockS2 + " captured";
+						const blockS = lastStat.blocks == 1 ? "" : "s";
+						lastStatValueElem.innerHTML = lastStat.blocks + " block" + blockS + " captured";
+						const blockS2 = bestStat.blocks == 1 ? "" : "s";
+						bestStatValueElem.innerHTML = bestStat.blocks + " block" + blockS2 + " captured";
 					}
 				}
 				if (lastStatCounter == 5) {
-					if (lastStatLbRank <= 0 && bestStatLbRank <= 0) {
+					if (lastStat.leaderboard_rank <= 0 && bestStat.leaderboard_rank <= 0) {
 						lastStatCounter = 0;
 					} else {
-						lastStatValueElem.innerHTML = lastStatLbRank == 0 ? "" : "#" + lastStatLbRank + " highest rank";
-						bestStatValueElem.innerHTML = bestStatLbRank == 0 ? "" : "#" + bestStatLbRank + " highest rank";
+						lastStatValueElem.innerHTML = lastStat.leaderboard_rank == 0 ? "" : "#" + lastStat.leaderboard_rank + " highest rank";
+						bestStatValueElem.innerHTML = bestStat.leaderboard_rank == 0 ? "" : "#" + bestStat.leaderboard_rank + " highest rank";
 					}
 				}
 			}
