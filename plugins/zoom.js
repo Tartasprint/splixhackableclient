@@ -1,5 +1,5 @@
 function isInGame() {
-    return beginScreen.getAttribute("style")?.includes("display: none");
+    return beginScreen.getAttribute("style")?.includes("display: none") && hc.km.active;
 }
 
 document.addEventListener("wheel", (e)=>{
@@ -25,10 +25,21 @@ function zoom_in(){
 }
 
 if(window.hc.km!==undefined){
-    window.hc.km.add_action('zoom_in', zoom_in);
-    window.hc.km.add_action('zoom_out', zoom_out);
-    window.hc.km.add_action('zoom_initial', zoom_initial);
-
+    window.hc.km.add_action({
+        name: 'zoom_in',
+        short: "Zoom in",
+        down: zoom_in,
+    });
+    window.hc.km.add_action({
+        name: 'zoom_out',
+        short: "Zoom out",
+        down: zoom_out,
+    });
+    window.hc.km.add_action({
+        name: 'zoom_initial',
+        short: "Zoom initial",
+        down: zoom_initial,
+    });
     window.hc.km.add_shortcut('KeyQ','zoom_in');
     window.hc.km.add_shortcut('KeyW','zoom_initial');
     window.hc.km.add_shortcut('KeyE','zoom_out');

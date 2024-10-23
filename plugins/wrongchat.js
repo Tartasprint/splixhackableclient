@@ -1758,5 +1758,10 @@ chatInput.addEventListener('keyup', function (e) {
 })
 
 if(window.hc.km){
-    window.hc.km.add_action('send_hi', ()=>wcSendMessage(strToHonkMsg('hi')));
+    window.hc.km.add_action({
+        name: "send_hi",
+        short: "Send hi in wrong chat.",
+        down: ()=>wcSendMessage(strToHonkMsg('hi')),
+        norepeat: true,
+    });
 }

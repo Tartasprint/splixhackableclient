@@ -13,7 +13,7 @@ class Flag  extends EventTarget {
         if(this.restore === undefined){
             if(input === "number"){
                 this.restore = v => {
-                    let x = Number.parseInt(v);
+                    let x = options.decimal ? Number.parseFloat(v) : Number.parseInt(v);
                     return Number.isNaN(x) ? {"v": undefined, "ok": false}:{"v":x, "ok":true};
                 }
             } else if(input === "checkbox"){
@@ -38,12 +38,23 @@ class Flag  extends EventTarget {
             this.context = null;
         }
         if(input === 'checkbox'){
-            window.hc.km.add_action('flags_toggleFlag_'+id,()=>{
-                this.value=!this.value;
+            window.hc.km.add_action({
+                    name: 'flags_toggleFlag_'+id,
+                    short: 'toggle flag: ' + label,
+                    down:()=>{this.value=!this.value;},
+                    norepeat: false,
+                });
+            window.hc.km.add_action({
+                name: 'flags_peekFlag_'+id,
+                short: 'peek flag: ' + label,
+                down:()=>{this.value=!this.value;},
+                up:()=>{this.value=!this.value;},
+                norepeat: true,
             });
         } else if(input === 'number'){
             if(options.min !== undefined) this.input.min = options.min;
             if(options.max !== undefined) this.input.max = options.max;
+            if(options.step !== undefined) this.input.step = options.step;
         }
     }
 
@@ -132,7 +143,7 @@ class FlagEditor {
             list: document.createElement('ul'),
         }
         this.ui.container.append(this.ui.list);
-        this.ui.container.classList.add('hc-flags-container');
+        this.ui.container.classList.add('hc-flags-container','hc-menu-container');
         this.ui.container.addEventListener('close', ()=>{
             hc.km.enable();
             this.__visible=false;
@@ -268,11 +279,15 @@ document.addEventListener('DOMContentLoaded',()=>{
             "default": "0"
         },
         {
-            "name": "bannerAdsUseCurse",
-            "caption": "Ads",
-            "description": "Check if you do not want to use ads.",
-            "type": "checkbox",
-            "default": "true"
+            "name": "menuOpacity",
+            "caption": "Menu opacity while playing",
+            "description": "To not miss anything in the game while you open a menu, you can make it translucent.",
+            "type": "number",
+            "default": "0.7",
+            "min": "0",
+            "max": "1",
+            "step": "0.1",
+            "decimal": true,
         },
     ]
     for(const flag of flags){
@@ -285,14 +300,19 @@ document.addEventListener('DOMContentLoaded',()=>{
             width:50%;
             height: 75%;
             overflow: auto;
-        }
+            scrollbar-color: white black;
+          }
         
         .hc-flags-container label {
-            padding-right: 1rem;    
+            padding-right: 1rem;   
         }
     `)
-    window.hc.km.add_action('flags_visibility_toggle', ()=>{window.hc.flags.toggleUI()});
-    window.hc.km.add_shortcut('F2','flags_visibility_toggle');
+    window.hc.km.add_action({
+        name: "menu_flags_toggle",
+        short: "Open/Close flags menu",
+        down: ()=>{ window.hc.flags.toggleUI()},
+    });
+    window.hc.km.add_shortcut('F2','menu_flags_toggle');
     window.hc.km.add_shortcut('KeyO','flags_toggleFlag_leaderboardHidden');
     window.hc.flags.on_change("uglyMode", value => {
         window.uglyMode=value;
@@ -302,4 +322,7 @@ document.addEventListener('DOMContentLoaded',()=>{
         leaderboardHidden=value;
         setLeaderboardVisibility();
     });
+    window.hc.flags.on_change("menuOpacity", value => {
+        document.body.style.setProperty('--menu-opacity',value);
+    })
 })

@@ -1296,6 +1296,7 @@ window.onload = function () {
 //when WebSocket connection is established
 function onOpen() {
 	isConnecting = false;
+	document.body.dataset.state="playing";
 	sendLegacyVersion();
 	sendPatreonCode();
 	sendName();
@@ -1374,6 +1375,7 @@ function openSkinScreen() {
 
 //hides main canvas and ui and shows beginScreen
 function showBeginHideMainCanvas() {
+	document.body.dataset.state="begin";
 	showBegin();
 	hideMainCanvas();
 }

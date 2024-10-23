@@ -3,7 +3,6 @@ class KeyboardManager {
         this.shortcuts = new Map();
         this.actions = new Map();
         this.listen=this.listen.bind(this);
-        this.listenup=this.listenup.bind(this);
         this.uitask=[];
         this.active=true;
         this.__visible=false;
@@ -46,6 +45,7 @@ class KeyboardManager {
     makeUI(){
         this.ui = {
             container: document.createElement('dialog'),
+            wrapper: document.createElement('div'),
             main: document.createElement('table'),
             body: document.createElement('tbody'),
             shortcutinput: document.createElement('input'),            
@@ -54,8 +54,8 @@ class KeyboardManager {
             resetbutton: document.createElement('button'),
         }
         const header = this.ui.main.appendChild(document.createElement('thead')).insertRow();
-        header.insertCell().innerText = "Shortcut";
-        header.insertCell().innerText = "Action";
+        header.appendChild(document.createElement('th')).innerText = "Shortcut";
+        header.appendChild(document.createElement('th')).innerText = "Action";
         this.ui.main.appendChild(this.ui.body);
         const footer = this.ui.main.appendChild(document.createElement('tfoot'));
         const input_cell = footer.insertRow().insertCell();
@@ -65,6 +65,7 @@ class KeyboardManager {
         input_form.appendChild(this.ui.shortcutinput);
         input_form.appendChild(this.ui.actioninput);
         this.ui.shortcutinput.addEventListener('keydown',e => {
+            if(e.code === 'Escape') return;
             const shortcut = Shortcut.from_event(e);
             e.preventDefault();
             this.ui.shortcutinput.value=shortcut.serialize();
@@ -78,16 +79,18 @@ class KeyboardManager {
             
         })
         input_form.appendChild(submit);
-        this.ui.container.classList.add('hc-km-container');
+        this.ui.container.classList.add('hc-km-container','hc-menu-container');
+        this.ui.wrapper.classList.add('hc-km-wrapper');
         this.ui.main.classList.add('hc-km-main');
         this.ui.shortcutinput.classList.add('hc-km-input');
         this.ui.actioninput.classList.add('hc-km-input');
+        this.ui.resetbutton.classList.add('hc-km-reset');
         const tasks = this.uitask; // This copy is necessary:
         this.uitask=null;          // if we set this.uitask after the loop, since the tasks are separated JS microtasks, a new task could be registered and forgotten.
         for(const task of tasks){
             task();
         }
-        this.ui.resetbutton.textContent = "Reset";
+        this.ui.resetbutton.textContent = "Reset all shortcuts";
         this.ui.resetbutton.title = "Reset";
         this.ui.resetbutton.addEventListener('click', _ => {
             let ok = confirm("Are you sure you want to reset your shortcuts ?\nIn case you want to back them up copy paste the Keyboard Manager Shortcuts flags in some file.");
@@ -115,8 +118,9 @@ class KeyboardManager {
             }
         }
         else { console.error('Could not load shortcuts.')};
-        this.ui.container.appendChild(this.ui.resetbutton);
-        this.ui.container.appendChild(this.ui.main);
+        this.ui.wrapper.appendChild(this.ui.resetbutton);
+        this.ui.wrapper.appendChild(this.ui.main);
+        this.ui.container.appendChild(this.ui.wrapper)
         this.ui.container.addEventListener('close', ()=>{
             hc.km.enable();
             this.__visible = false;
@@ -128,7 +132,6 @@ class KeyboardManager {
     add_shortcut(shortcut,action,up=undefined){
         this.shortcuts.set(shortcut,{
             action: action,
-            ...(up && {up}),
         });
         this.taskUI(()=>{
                 let the_row = undefined;
@@ -165,12 +168,12 @@ class KeyboardManager {
         });
     }
 
-    add_action(name,func){
-        this.actions.set(name,func);
+    add_action(action){
+        this.actions.set(action.name,action);
         this.taskUI(()=>{
             const o = document.createElement('option');
-            o.text=name;
-            o.value=name;
+            o.text=action.short;
+            o.value=action.name;
             this.ui.actioninput.add(o);
         })
     }
@@ -193,19 +196,15 @@ class KeyboardManager {
         if(action === undefined) return;
         action = this.actions.get(action.action);
         if(action === undefined) return;
-        action();
-    }
-
-    /**
-     * 
-     * @param {KeyboardEvent} e
-     */
-    listenup(e) {
-        if(!this.active) return;
-        let action = this.shortcuts.get(Shortcut.from_event(e).serialize());
-        if(action === undefined) return;
-        if(action.up === undefined) return;
-        action = this.actions.get(action.up);
+        if(e.type === 'keyup'){
+            action = action.up;
+        } else if(e.type === 'keydown') {
+            if(e.repeat && action.norepeat) return;
+            action = action.down;
+        } else {
+            console.error('The keyboard manager is supposed to listen to "keyup" and "keydown" events, nothing else.', (new Error().stack));
+            return;
+        }
         if(action === undefined) return;
         action();
     }
@@ -221,6 +220,8 @@ class KeyboardManager {
     showUI(){
         this.__visible=true;
         this.ui.container.showModal();
+        this.ui.resetbutton.blur();
+        window.hc.km.active = false;
     }
 
     
@@ -279,42 +280,70 @@ class Shortcut {
 window.hc = {};
 window.hc.km = new KeyboardManager();
 
-window.hc.km.add_action("shortcuts_toggle",()=>{window.hc.km.toggleUI()});
-window.hc.km.add_shortcut("F1","shortcuts_toggle");
+window.hc.km.add_action({
+    name: "menu_shortcuts_toggle",
+    short: "Open/Close shortcuts menu.",
+    down: ()=>{console.log('Short!!');window.hc.km.toggleUI()},
+});
+window.hc.km.add_shortcut("F1","menu_shortcuts_toggle");
 
 let core_actions = [
-    ["none", ()=>{}],
-    ["move_up",()=>{sendDir(Direction.UP)}],
-    ["move_down", ()=>{sendDir(Direction.DOWN)}],
-    ["move_right", ()=>{sendDir(Direction.RIGHT)}],
-    ["move_left", ()=>{sendDir(Direction.LEFT)}],
-    ["move_pause", ()=>{sendDir(Direction.PAUSE)}],
-    ["start_honk", ()=>{honkStart()}],
-    ["end_honk", ()=>{honkEnd()}],
-    ["core_move_active_up",()=>{activateDir(Direction.UP)}],
-    ["core_move_active_down", ()=>{activateDir(Direction.DOWN)}],
-    ["core_move_active_right", ()=>{activateDir(Direction.RIGHT)}],
-    ["core_move_active_left", ()=>{activateDir(Direction.LEFT)}],
-    ["core_move_active_pause", ()=>{activateDir(Direction.PAUSE)}],
-    ["core_move_deactive_up",()=>{deactivateDir(Direction.UP)}],
-    ["core_move_deactive_down", ()=>{deactivateDir(Direction.DOWN)}],
-    ["core_move_deactive_right", ()=>{deactivateDir(Direction.RIGHT)}],
-    ["core_move_deactive_left", ()=>{deactivateDir(Direction.LEFT)}],
-    ["core_move_deactive_pause", ()=>{deactivateDir(Direction.PAUSE)}],
+    {
+        name: "ui_honk",
+        short: "Honk",
+        down: ()=>{honkStart()},
+        up: ()=>{honkEnd()},
+        norepeat: true
+    },
+    {
+        name: "ui_up",
+        short: "Go up",
+        down: ()=>{activateDir(Direction.UP)},
+        up: ()=>{deactivateDir(Direction.UP)},
+        norepeat: true
+    },
+    {
+        name: "ui_down",
+        short: "Go down",
+        down: ()=>{activateDir(Direction.DOWN)},
+        up: ()=>{deactivateDir(Direction.DOWN)},
+        norepeat: true
+    },
+    {
+        name: "ui_right",
+        short: "Go right",
+        down: ()=>{activateDir(Direction.RIGHT)},
+        up: ()=>{deactivateDir(Direction.RIGHT)},
+        norepeat: true
+    },
+    {
+        name: "ui_left",
+        short: "Go left",
+        down: ()=>{activateDir(Direction.LEFT)},
+        up: ()=>{deactivateDir(Direction.LEFT)},
+        norepeat: true
+    },
+    {
+        name: "ui_pause",
+        short: "Pause",
+        down: ()=>{activateDir(Direction.PAUSE)},
+        up: ()=>{deactivateDir(Direction.PAUSE)},
+        norepeat: true
+    },
 ];
 
 
 
 for(const a of core_actions){
-    window.hc.km.add_action(...a);
+    window.hc.km.add_action(a);
 }
 let core_shortcuts = [
-    ["ArrowUp","core_move_active_up","core_move_deactive_up"],
-    ["ArrowDown","core_move_active_down","core_move_deactive_down"],
-    ["ArrowRight","core_move_active_right","core_move_deactive_right"],
-    ["ArrowLeft","core_move_active_left","core_move_deactive_left"],
-    ["KeyP","core_move_active_pause","core_move_deactive_pause"],
-    ["Space","start_honk","end_honk"],
+    ["ArrowUp","ui_up"],
+    ["ArrowDown","ui_down"],
+    ["ArrowRight","ui_right"],
+    ["ArrowLeft","ui_left"],
+    ["KeyP","ui_pause"],
+    ["Space","ui_honk"],
 ];
 for(const a of core_shortcuts){
     window.hc.km.add_shortcut(...a);
@@ -324,25 +353,56 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const style = document.createElement('style');
     style.textContent=`
     .hc-km-container {
-        width:50%;
         padding: 0;
     }
+
+    .hc-km-wrapper {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 1ex;
+        padding: 1ex;
+    }
+
     .hc-km-main {
         width: calc(100% - 2em);
         padding: 1em;
+        border-collapse: collapse;
     }
-    .hc-km-main {
-        width: calc(100% - 2em);
-        padding: 1em;
+    .hc-km-main > thead {
+        font-weight: bold;
     }
+
+    .hc-km-main > tbody > tr:nth-child(3n) {
+        background-color: rgba(0,0,0,0.1);
+    }
+    
+    .hc-km-main > tbody > tr:nth-child(3n+1) {
+        background-color: rgba(255,255,255,0.1);
+    }
+
+    .hc-km-main td,.hc-km-main th{
+        border-bottom: 1px dashed black;
+    }
+    
+    .hc-km-main > * > tr > *+* {
+        border-left: 3px solid black;
+        padding-left: 3px;
+    }
+
     .hc-km-input {
         width: 100%;
         box-sizing: border-box;
+    }
+    
+    .hc-km-reset {
+        width: max-content;
     }
     `;
     document.head.append(style);
     window.hc.km.makeUI();
     document.body.append(window.hc.km.ui.container);
     document.body.addEventListener('keydown',window.hc.km.listen);
-    document.body.addEventListener('keyup',window.hc.km.listenup);
+    document.body.addEventListener('keyup',window.hc.km.listen);
 })
