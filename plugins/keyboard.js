@@ -93,7 +93,7 @@ class KeyboardManager {
         this.ui.resetbutton.textContent = "Reset all shortcuts";
         this.ui.resetbutton.title = "Reset";
         this.ui.resetbutton.addEventListener('click', _ => {
-            let ok = confirm("Are you sure you want to reset your shortcuts ?\nIn case you want to back them up copy paste the Keyboard Manager Shortcuts flags in some file.");
+            let ok = confirm("This will reload the page !!\nAre you sure you want to reset your shortcuts ?\nIn case you want to back them up copy paste the Keyboard Manager Shortcuts flags in some file.");
             if(ok){
                 if(this.flag_ready()) {
                     window.hc.flags._.km_shortcuts = [];
