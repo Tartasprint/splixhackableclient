@@ -45,7 +45,7 @@ class KeyboardManager {
     
     makeUI(){
         this.ui = {
-            container: document.createElement('div'),
+            container: document.createElement('dialog'),
             main: document.createElement('table'),
             body: document.createElement('tbody'),
             shortcutinput: document.createElement('input'),            
@@ -90,7 +90,7 @@ class KeyboardManager {
         this.ui.resetbutton.textContent = "Reset";
         this.ui.resetbutton.title = "Reset";
         this.ui.resetbutton.addEventListener('click', _ => {
-            let ok = confirm("Are you sure you want to reset your shortcuts ?\nIn case you want to back them um copy paste the Keyboard Manager Shortcuts flags in some file.");
+            let ok = confirm("Are you sure you want to reset your shortcuts ?\nIn case you want to back them up copy paste the Keyboard Manager Shortcuts flags in some file.");
             if(ok){
                 if(this.flag_ready()) {
                     window.hc.flags._.km_shortcuts = [];
@@ -117,6 +117,10 @@ class KeyboardManager {
         else { console.error('Could not load shortcuts.')};
         this.ui.container.appendChild(this.ui.resetbutton);
         this.ui.container.appendChild(this.ui.main);
+        this.ui.container.addEventListener('close', ()=>{
+            hc.km.enable();
+            this.__visible = false;
+        })
         colorBox(this.ui.container,'grey','black');
         this.hideUI();
     }
@@ -216,13 +220,13 @@ class KeyboardManager {
 
     showUI(){
         this.__visible=true;
-        this.ui.container.style.display='table';
+        this.ui.container.showModal();
     }
 
     
     hideUI(){
         this.__visible=false;
-        this.ui.container.style.display='none';
+        this.ui.container.close();
     }
 
     toggleUI(){
@@ -320,9 +324,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const style = document.createElement('style');
     style.textContent=`
     .hc-km-container {
-        position: fixed;
-        top:25%;
-        left: 25%;
         width:50%;
         padding: 0;
     }

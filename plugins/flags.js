@@ -128,9 +128,16 @@ class FlagEditor {
     constructor(){
         this.flags= new Map();
         this.ui = {
-            container: document.createElement('ul'),
+            container: document.createElement('dialog'),
+            list: document.createElement('ul'),
         }
+        this.ui.container.append(this.ui.list);
         this.ui.container.classList.add('hc-flags-container');
+        this.ui.container.addEventListener('close', ()=>{
+            hc.km.enable();
+            this.__visible=false;
+        });
+        this.ui.list.classList.add('hc-flags-list');
         this.hideUI();
         let that=this;
         this._ = new Proxy({}, {
@@ -161,7 +168,7 @@ class FlagEditor {
         const li = document.createElement('li');
         li.classList.add('hc-flags-flag');
         this.flags.set(id,new Flag(li,id,input,init,label,context,options));
-        this.ui.container.append(li);
+        this.ui.list.append(li);
     }
 
     toggleUI(){
@@ -171,12 +178,13 @@ class FlagEditor {
     
     showUI(){
         this.__visible = true;
-        this.ui.container.style.display='block';
+        this.ui.container.showModal();
+        hc.km.disable();
     }
 
     hideUI(){
         this.__visible = false;
-        this.ui.container.style.display='none';
+        this.ui.container.close();
     }
 
     on_change(flag_name, callback){
@@ -274,9 +282,6 @@ document.addEventListener('DOMContentLoaded',()=>{
     colorBox(window.hc.flags.ui.container,'grey','black');
     addStyle(`
         .hc-flags-container {
-            position: fixed;
-            top:12.5%;
-            left: 25%;
             width:50%;
             height: 75%;
             overflow: auto;
