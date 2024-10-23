@@ -283,10 +283,13 @@ window.hc.km = new KeyboardManager();
 window.hc.km.add_action({
     name: "menu_shortcuts_toggle",
     short: "Open/Close shortcuts menu.",
-    down: ()=>{console.log('Short!!');window.hc.km.toggleUI()},
+    down: ()=>{window.hc.km.toggleUI()},
 });
 window.hc.km.add_shortcut("F1","menu_shortcuts_toggle");
-
+window.hc.km.add_action({
+    name: "none",
+    short: "Do nothing",
+});
 let core_actions = [
     {
         name: "ui_honk",
