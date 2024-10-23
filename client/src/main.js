@@ -240,6 +240,15 @@ const DeviceTypes = Object.freeze({
 	ANDROID: 2,
 });
 
+const canvasTransformTypes = Object.freeze({
+	MAIN: 1,
+	TUTORIAL: 2,
+	SKIN: 3,
+	SKIN_BUTTON: 4,
+	TITLE: 5,
+	LIFE: 6,
+});
+
 //#endregion constants
 
 //stackoverflow.com/a/15666143/3625298
@@ -316,6 +325,54 @@ function isIframe() {
 	}
 }
 
+function addSocketWrapper() {
+	if (typeof WebSocket == "undefined") {
+		return;
+	}
+
+	var simulatedLatency = parseInt(localStorage.simulatedLatency) / 2;
+	if (simulatedLatency > 0) {
+		const RealWebSocket = WebSocket;
+		const WrappedWebSocket = function (url) {
+			var websocket = new RealWebSocket(url);
+			websocket.binaryType = "arraybuffer";
+
+			this.onclose = function () {};
+			this.onopen = function () {};
+			this.onmessage = function () {};
+
+			var me = this;
+			websocket.onclose = function () {
+				window.setTimeout(function () {
+					me.onclose();
+				}, simulatedLatency);
+			};
+			websocket.onopen = function () {
+				window.setTimeout(function () {
+					me.onopen();
+				}, simulatedLatency);
+			};
+			websocket.onmessage = function (data) {
+				window.setTimeout(function () {
+					me.onmessage(data);
+				}, simulatedLatency);
+			};
+			this.send = function (data) {
+				window.setTimeout(function () {
+					websocket.send(data);
+				}, simulatedLatency);
+			};
+			this.close = function () {
+				window.setTimeout(function () {
+					websocket.close();
+				}, simulatedLatency);
+			};
+		};
+		window.WebSocket = WrappedWebSocket.bind();
+	}
+}
+addSocketWrapper();
+
 class Stats {
 	blocks = 0;
 	kills = 0;
@@ -323,6 +380,222 @@ class Stats {
 	alive = 0;
 	no1_time = 0;
 }
+
+/**
+ * @typedef {{
+ * 	ctx: CanvasRenderingContext2D,
+ * 	offset: number,
+ * 	color: string | CanvasGradient | CanvasPattern,
+ * }} DrawCall
+ */
+
+/**
+ * @typedef {[number, number]} Vec2
+ */
+
+class SplixCanvas {
+	canvas;
+	quality = 1;
+	ctx;
+	camPos = 0;
+	camPosSet = false;
+	camPosPrevFrame = [0,0];
+	myNameAlphaTimer = 0;
+	missedFrames = [];
+	gainedFrames = [];
+	canvasTransformType = canvasTransformTypes.MAIN
+	constructor(){
+
+	}
+
+	/**
+	 * draws a trail on a canvas, can be drawn on multiple canvases
+	 * when drawCalls contains more than one object
+	 * @param {DrawCall[]} drawCalls 
+	 * @param {Vec2[]} trail
+	 * @param {Vec2} lastPos 
+	 */
+	drawTrail(drawCalls, trail, lastPos) {
+		if (trail.length > 0) {
+			for (const drawCall of drawCalls) {
+				const thisCtx = drawCall.ctx;
+				thisCtx.lineCap = "round";
+				thisCtx.lineJoin = "round";
+				thisCtx.lineWidth = 6;
+				thisCtx.strokeStyle = drawCall.color;
+				const offset = drawCall.offset;
+				thisCtx.beginPath();
+				thisCtx.moveTo(trail[0][0] * 10 + offset, trail[0][1] * 10 + offset);
+				for (let i = 1; i < trail.length; i++) {
+					thisCtx.lineTo(trail[i][0] * 10 + offset, trail[i][1] * 10 + offset);
+				}
+				if (lastPos !== null) {
+					thisCtx.lineTo(lastPos[0] * 10 + offset, lastPos[1] * 10 + offset);
+				}
+				thisCtx.stroke();
+			}
+		}
+	}
+
+	/**
+	 * draws diagonal lines on a canvas, can be used as mask and stuff like that
+	 * @param {CanvasRenderingContext2D} ctx 
+	 * @param {string | CanvasGradient | CanvasPattern} color 
+	 * @param {number} thickness
+	 * @param {number} spaceBetween 
+	 * @param {number} offset
+	 */
+	drawDiagonalLines(ctx, color, thickness, spaceBetween, offset) {
+		if (thickness > 0) {
+			ctx.lineCap = "butt";
+			ctx.strokeStyle = color;
+			ctx.lineWidth = thickness;
+			const minSize = VIEWPORT_RADIUS * 20;
+			var xOffset = 0;
+			var yOffset = 0;
+			if (this.camPosPrevFrame !== null && this.canvasTransformType == canvasTransformTypes.MAIN) {
+				xOffset = Math.round((camPosPrevFrame[0] * 10 - minSize / 2) / spaceBetween) * spaceBetween;
+				yOffset = Math.round((camPosPrevFrame[1] * 10 - minSize / 2) / spaceBetween) * spaceBetween;
+			}
+			xOffset += offset % spaceBetween;
+			for (var i = -minSize; i < minSize; i += spaceBetween) {
+				var thisXOffset = xOffset + i;
+				ctx.beginPath();
+				ctx.moveTo(thisXOffset, yOffset);
+				ctx.lineTo(thisXOffset + minSize, yOffset + minSize);
+				ctx.stroke();
+			}
+		}
+	}
+}
+
+class MinimapCanvas {
+	canvas;
+
+}
+
+
+class SplixLogoCanvas {
+	canvas;
+	ctx;
+	timer = -1;
+	resetNextFrame = true;
+	lastRender = 0;
+	constructor(){
+		for (const line of titleLines) {
+			for (const subline of line.line) {
+				for (let coordI = 0; coordI < subline.length; coordI += 2) {
+					subline[coordI] += line.posOffset[0] - 40;
+					subline[coordI + 1] += line.posOffset[1] - 20;
+				}
+			}
+		}
+		this.canvas= document.getElementById("logoCanvas");
+		this.ctx = this.canvas.getContext("2d");
+	}
+	
+	/**
+	 * draws main title
+	 * @param {boolean} [isShadow]
+	 * @param {number} [maxExtrude]
+	 * @param {boolean} [extraShadow] 
+	 */
+	drawTitle(isShadow, maxExtrude, extraShadow) {
+		this.ctx.strokeStyle = (!!isShadow) ? colors.red.patternEdge : colors.red.brighter;
+		this.ctx.lineWidth = 16;
+		this.ctx.lineJoin = "round";
+		this.ctx.lineCap = "round";
+
+		if (extraShadow) {
+			this.ctx.shadowBlur = 40 * MAX_PIXEL_RATIO;
+			this.ctx.shadowColor = "rgba(0,0,0,0.4)";
+			this.ctx.shadowOffsetX = this.ctx.shadowOffsetY = 10 * MAX_PIXEL_RATIO;
+		} else {
+			this.ctx.shadowColor = "rgba(0,0,0,0)";
+		}
+
+		const t = this.timer;
+		for (const line of titleLines) {
+			var lineT = clamp01(t * line.speed - line.offset);
+			let extrude = clamp01(t) * 5;
+			if (maxExtrude !== undefined) {
+				extrude = Math.min(extrude, maxExtrude);
+			}
+			this.ctx.beginPath();
+			for (let subLineI = 0; subLineI < line.line.length; subLineI++) {
+				const subline = line.line[subLineI];
+				const sublineT = clamp01(lineT * (line.line.length - 1) - subLineI + 1);
+				if (sublineT > 0) {
+					if (sublineT == 1) {
+						if (subLineI === 0 && subline.length == 2) {
+							this.ctx.moveTo(subline[0] - extrude, subline[1] - extrude);
+						} else if (subline.length == 2) {
+							this.ctx.lineTo(subline[0] - extrude, subline[1] - extrude);
+						} else if (subline.length == 6) {
+							this.ctx.bezierCurveTo(
+								subline[0] - extrude,
+								subline[1] - extrude,
+								subline[2] - extrude,
+								subline[3] - extrude,
+								subline[4] - extrude,
+								subline[5] - extrude,
+							);
+						}
+					} else {
+						const lastLine = line.line[subLineI - 1];
+						const lastPos = [lastLine[lastLine.length - 2], lastLine[lastLine.length - 1]];
+						if (subline.length == 2) {
+							this.ctx.lineTo(
+								lerp(lastPos[0], subline[0], sublineT) - extrude,
+								lerp(lastPos[1], subline[1], sublineT) - extrude,
+							);
+						} else if (subline.length == 6) {
+							const p0 = lastPos;
+							const p1 = [subline[0], subline[1]];
+							const p2 = [subline[2], subline[3]];
+							const p3 = [subline[4], subline[5]];
+							const p4 = lerpA(p0, p1, sublineT);
+							const p5 = lerpA(p1, p2, sublineT);
+							const p6 = lerpA(p2, p3, sublineT);
+							const p7 = lerpA(p4, p5, sublineT);
+							const p8 = lerpA(p5, p6, sublineT);
+							const p9 = lerpA(p7, p8, sublineT);
+							this.ctx.bezierCurveTo(
+								p4[0] - extrude,
+								p4[1] - extrude,
+								p7[0] - extrude,
+								p7[1] - extrude,
+								p9[0] - extrude,
+								p9[1] - extrude,
+							);
+						}
+					}
+				}
+			}
+			this.ctx.stroke();
+		}
+	}
+
+	render(timeStamp){
+		if (this.resetNextFrame) {
+			this.resetNextFrame = false;
+			this.timer = -1;
+			this.lastRender = timeStamp;
+		}
+		this.timer += (timeStamp - this.lastRender) * 0.002;
+		this.lastRender = timeStamp;
+
+		canvasTransformType = canvasTransformTypes.TITLE;
+		ctxCanvasSize(this.ctx, true);
+		ctxApplyCamTransform(this.ctx, false, true);
+
+		this.drawTitle(true, 0, true);
+		this.drawTitle(true, 2.5);
+		this.drawTitle();
+		this.ctx.restore();
+	}
+}
+
 
 // Some dated code is using these in places like `for(i = 0`.
 // While ideally these variables should all be made local,
@@ -384,7 +657,8 @@ var tutorialCanvas, tutCtx, tutorialTimer = 0, tutorialPrevTimer = 0, tutorialBl
 var touchControlsElem;
 var skinButtonCanvas, skinButtonCtx, skinButtonBlocks = [], skinButtonShadow;
 var skinCanvas, skinCtx, skinScreen, skinScreenVisible = false, skinScreenBlocks;
-var titCanvas, titCtx, titleTimer = -1, resetTitleNextFrame = true, titleLastRender = 0;
+// Canvas for spli 
+const title_canvas = new SplixLogoCanvas();
 var currentTouches = [], doRefreshAfterDie = false, pressedKeys = [];
 var camPosOffset = [0, 0], camRotOffset = 0, camShakeForces = [];
 var honkStartTime = undefined, lastHonkTime = 0, honkSfx = null;
@@ -417,53 +691,7 @@ var isConnectingWithTransition = false;
 /**@type {GameConnection?} */
 let game_connection = null;
 
-function addSocketWrapper() {
-	if (typeof WebSocket == "undefined") {
-		return;
-	}
 
-	var simulatedLatency = parseInt(localStorage.simulatedLatency) / 2;
-	if (simulatedLatency > 0) {
-		const RealWebSocket = WebSocket;
-		const WrappedWebSocket = function (url) {
-			var websocket = new RealWebSocket(url);
-			websocket.binaryType = "arraybuffer";
-
-			this.onclose = function () {};
-			this.onopen = function () {};
-			this.onmessage = function () {};
-
-			var me = this;
-			websocket.onclose = function () {
-				window.setTimeout(function () {
-					me.onclose();
-				}, simulatedLatency);
-			};
-			websocket.onopen = function () {
-				window.setTimeout(function () {
-					me.onopen();
-				}, simulatedLatency);
-			};
-			websocket.onmessage = function (data) {
-				window.setTimeout(function () {
-					me.onmessage(data);
-				}, simulatedLatency);
-			};
-			this.send = function (data) {
-				window.setTimeout(function () {
-					websocket.send(data);
-				}, simulatedLatency);
-			};
-			this.close = function () {
-				window.setTimeout(function () {
-					websocket.close();
-				}, simulatedLatency);
-			};
-		};
-		window.WebSocket = WrappedWebSocket.bind();
-	}
-}
-addSocketWrapper();
 
 function simpleRequest(url, cb) {
 	var req = new XMLHttpRequest();
@@ -1300,7 +1528,7 @@ function showBeginHideSkin() {
 
 //when WebSocket connection is closed
 function onClose() {
-	if (!!game_connection && game_connection.ws.readyState == WebSocket.OPEN) {
+	if (!!game_connection && !!game_connection.ws && game_connection.ws.readyState == WebSocket.OPEN) {
 		game_connection.ws.close();
 	}
 	if (!playingAndReady) {
@@ -2007,7 +2235,7 @@ function resetAll() {
 	totalPlayers = 0;
 	playingAndReady = false;
 	camShakeForces = [];
-	resetTitleNextFrame = true;
+	title_canvas.resetNextFrame = true;
 	allowSkipDeathTransition = false;
 	skipDeathTransition = false;
 	minimapCtx.clearRect(0, 0, 160, 160);
@@ -2113,22 +2341,6 @@ function initSkinScreen() {
 		}
 		skinButtonBlocks[0].setBlockId(parseInt(currentColor) + 1, false);
 	};
-}
-
-//initiate title players
-function initTitle() {
-	for (var lineI = 0; lineI < titleLines.length; lineI++) {
-		var thisLine = titleLines[lineI];
-		for (var subLineI = 0; subLineI < thisLine.line.length; subLineI++) {
-			var thisSubLine = thisLine.line[subLineI];
-			for (var coordI = 0; coordI < thisSubLine.length; coordI += 2) {
-				thisSubLine[coordI] += thisLine.posOffset[0] - 40;
-				thisSubLine[coordI + 1] += thisLine.posOffset[1] - 20;
-			}
-		}
-	}
-	titCanvas = document.getElementById("logoCanvas");
-	titCtx = titCanvas.getContext("2d");
 }
 
 function testHashForMobile() {
@@ -2668,14 +2880,6 @@ function ctxCanvasSize(ctx, dontUseQuality) {
 //apply camera transformations on a canvas
 //canvasTransformType is a global that determines what
 //transformation should be used
-var canvasTransformTypes = {
-	MAIN: 1,
-	TUTORIAL: 2,
-	SKIN: 3,
-	SKIN_BUTTON: 4,
-	TITLE: 5,
-	LIFE: 6,
-};
 var canvasTransformType = canvasTransformTypes.MAIN;
 function ctxApplyCamTransform(ctx, setSize, dontUseQuality) {
 	if (setSize) {
@@ -3552,85 +3756,6 @@ var ease = {
 		return t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2;
 	},
 };
-
-//draws main title
-function drawTitle(ctx, time, isShadow, maxExtrude, extraShadow) {
-	ctx.strokeStyle = (!!isShadow) ? colors.red.patternEdge : colors.red.brighter;
-	ctx.lineWidth = 16;
-	ctx.lineJoin = "round";
-	ctx.lineCap = "round";
-
-	if (extraShadow) {
-		ctx.shadowBlur = 40 * MAX_PIXEL_RATIO;
-		ctx.shadowColor = "rgba(0,0,0,0.4)";
-		ctx.shadowOffsetX = ctx.shadowOffsetY = 10 * MAX_PIXEL_RATIO;
-	} else {
-		ctx.shadowColor = "rgba(0,0,0,0)";
-	}
-
-	var t = titleTimer;
-	for (var lineI = 0; lineI < titleLines.length; lineI++) {
-		var thisLine = titleLines[lineI];
-		var lineT = clamp01(t * thisLine.speed - thisLine.offset);
-		var extrude = clamp01(t);
-		extrude *= 5;
-		if (maxExtrude !== undefined) {
-			extrude = Math.min(extrude, maxExtrude);
-		}
-		ctx.beginPath();
-		for (var subLineI = 0; subLineI < thisLine.line.length; subLineI++) {
-			var thisSubLine = thisLine.line[subLineI];
-			var subLineT = clamp01(lineT * (thisLine.line.length - 1) - subLineI + 1);
-			if (subLineT > 0) {
-				if (subLineT == 1) {
-					if (subLineI === 0 && thisSubLine.length == 2) {
-						ctx.moveTo(thisSubLine[0] - extrude, thisSubLine[1] - extrude);
-					} else if (thisSubLine.length == 2) {
-						ctx.lineTo(thisSubLine[0] - extrude, thisSubLine[1] - extrude);
-					} else if (thisSubLine.length == 6) {
-						ctx.bezierCurveTo(
-							thisSubLine[0] - extrude,
-							thisSubLine[1] - extrude,
-							thisSubLine[2] - extrude,
-							thisSubLine[3] - extrude,
-							thisSubLine[4] - extrude,
-							thisSubLine[5] - extrude,
-						);
-					}
-				} else {
-					var lastLine = thisLine.line[subLineI - 1];
-					var lastPos = [lastLine[lastLine.length - 2], lastLine[lastLine.length - 1]];
-					if (thisSubLine.length == 2) {
-						ctx.lineTo(
-							lerp(lastPos[0], thisSubLine[0], subLineT) - extrude,
-							lerp(lastPos[1], thisSubLine[1], subLineT) - extrude,
-						);
-					} else if (thisSubLine.length == 6) {
-						var p0 = lastPos;
-						var p1 = [thisSubLine[0], thisSubLine[1]];
-						var p2 = [thisSubLine[2], thisSubLine[3]];
-						var p3 = [thisSubLine[4], thisSubLine[5]];
-						var p4 = lerpA(p0, p1, subLineT);
-						var p5 = lerpA(p1, p2, subLineT);
-						var p6 = lerpA(p2, p3, subLineT);
-						var p7 = lerpA(p4, p5, subLineT);
-						var p8 = lerpA(p5, p6, subLineT);
-						var p9 = lerpA(p7, p8, subLineT);
-						ctx.bezierCurveTo(
-							p4[0] - extrude,
-							p4[1] - extrude,
-							p7[0] - extrude,
-							p7[1] - extrude,
-							p9[0] - extrude,
-							p9[1] - extrude,
-						);
-					}
-				}
-			}
-		}
-		ctx.stroke();
-	}
-}
 
 //draws blocks on ctx
 function drawBlocks(ctx, blocks, checkViewport) {
@@ -4610,23 +4735,8 @@ function loop(timeStamp) {
 		engagementSetIsPlaying(playingAndReady && (Date.now() - lastSendDirTime) < 20000);
 
 		//title
-		if (beginScreenVisible && timeStamp - titleLastRender > 49) {
-			if (resetTitleNextFrame) {
-				resetTitleNextFrame = false;
-				titleTimer = -1;
-				titleLastRender = timeStamp;
-			}
-			titleTimer += (timeStamp - titleLastRender) * 0.002;
-			titleLastRender = timeStamp;
-
-			canvasTransformType = canvasTransformTypes.TITLE;
-			ctxCanvasSize(titCtx, true);
-			ctxApplyCamTransform(titCtx, false, true);
-
-			drawTitle(titCtx, titleTimer, true, 0, true);
-			drawTitle(titCtx, titleTimer, true, 2.5);
-			drawTitle(titCtx, titleTimer);
-			titCtx.restore();
+		if (beginScreenVisible && timeStamp - title_canvas.lastRender > 49) {
+			title_canvas.render();
 		}
 
 		//tutorial canvas
