@@ -657,17 +657,12 @@ var tutorialCanvas, tutCtx, tutorialTimer = 0, tutorialPrevTimer = 0, tutorialBl
 var touchControlsElem;
 var skinButtonCanvas, skinButtonCtx, skinButtonBlocks = [], skinButtonShadow;
 var skinCanvas, skinCtx, skinScreen, skinScreenVisible = false, skinScreenBlocks;
-// Canvas for spli 
-const title_canvas = new SplixLogoCanvas();
+/** @type {SplixLogoCanvas} Canvas for splix animated logo */ 
+let title_canvas;
 var currentTouches = [], doRefreshAfterDie = false, pressedKeys = [];
 var camPosOffset = [0, 0], camRotOffset = 0, camShakeForces = [];
 var honkStartTime = undefined, lastHonkTime = 0, honkSfx = null;
 var skipDeathTransition = false, allowSkipDeathTransition = false, deathTransitionTimeout = null;
-var thisServerAvgPing = 0,
-	thisServerDiffPing = 0,
-	thisServerLastPing = 0,
-	lastPingTime = 0,
-	waitingForPing = false;
 var closeNotification = null, connectionLostNotification = null;
 var lastMyPosSetClientSideTime = 0,
 	lastMyPosServerSideTime = 0,
@@ -1426,7 +1421,7 @@ window.addEventListener('load', function () {
 
 	initTutorial();
 	initSkinScreen();
-	initTitle();
+	title_canvas = new SplixLogoCanvas();
 	setLeaderboardVisibility();
 
 	//best stats
@@ -1586,13 +1581,24 @@ function connectWithTransition(dontDoAds) {
 
 class GameConnection {
 	ws;
-	isConnecting = true;
 	url;
+	
+	// Status
+	isConnecting = true;
+	closedBecauseOfDeath = false;
+	
+	// Ping
 	serverAvgPing = 0;
 	serverLastPing = 0;
-	closedBecauseOfDeath = false;
+	serverDiffPing = 0;
+	lastPingTime = 0;
+	waitingForPing = false;
+	
+	// Trail
 	isRequestingMyTrail = false;
 	trailPushesDuringRequest = [];
+
+
 	/** @type {number}  time stamp of the opening of the websocket connection */
 	onOpenTime;
 	constructor(url){
@@ -2178,14 +2184,14 @@ class GameConnection {
 			player.doHonk(time);
 		}
 		if (data[0] == receiveAction.PONG) {
-			var ping = Date.now() - lastPingTime;
-			var thisDiff = Math.abs(ping - thisServerLastPing);
-			thisServerDiffPing = Math.max(thisServerDiffPing, thisDiff);
-			thisServerDiffPing = lerp(thisDiff, thisServerDiffPing, 0.5);
-			thisServerAvgPing = lerp(thisServerAvgPing, ping, 0.5);
-			thisServerLastPing = ping;
-			lastPingTime = Date.now();
-			waitingForPing = false;
+			const ping = Date.now() - this.lastPingTime;
+			const thisDiff = Math.abs(ping - this.serverLastPing);
+			this.serverDiffPing = Math.max(this.serverDiffPing, thisDiff);
+			this.serverDiffPing = lerp(thisDiff, this.serverDiffPing, 0.5);
+			this.serverAvgPing = lerp(this.serverAvgPing, ping, 0.5);
+			this.serverLastPing = ping;
+			this.lastPingTime = Date.now();
+			this.waitingForPing = false;
 		}
 		if (data[0] == receiveAction.UNDO_PLAYER_DIE) {
 			id = bytesToInt(data[1], data[2]);
@@ -4736,7 +4742,7 @@ function loop(timeStamp) {
 
 		//title
 		if (beginScreenVisible && timeStamp - title_canvas.lastRender > 49) {
-			title_canvas.render();
+			title_canvas.render(timeStamp);
 		}
 
 		//tutorial canvas
@@ -4999,9 +5005,9 @@ function loop(timeStamp) {
 
 		//debug info
 		if (localStorage.drawDebug == "true") {
-			var avg = Math.round(thisServerAvgPing);
-			var last = Math.round(thisServerLastPing);
-			var diff = Math.round(thisServerDiffPing);
+			var avg = Math.round(game_connection.serverAvgPing);
+			var last = Math.round(game_connection.serverLastPing);
+			var diff = Math.round(game_connection.serverDiffPing);
 			var str = "avg:" + avg + " last:" + last + " diff:" + diff;
 			ctx.font = "14px Arial, Helvetica, sans-serif";
 			ctx.fillStyle = colors.red.brighter;
@@ -5043,11 +5049,13 @@ function loop(timeStamp) {
 		}
 	}
 
-	var maxPingTime = waitingForPing ? 10000 : 5000;
-	if (game_connection !== null && Date.now() - lastPingTime > maxPingTime) {
-		lastPingTime = Date.now();
-		if (game_connection.wsSendMsg(sendAction.PING)) {
-			waitingForPing = true;
+	if(game_connection !== null){
+		const maxPingTime = game_connection.waitingForPing ? 10000 : 5000;
+		if (Date.now() - game_connection.lastPingTime > maxPingTime) {
+			game_connection.lastPingTime = Date.now();
+			if (game_connection.wsSendMsg(sendAction.PING)) {
+				game_connection.waitingForPing = true;
+			}
 		}
 	}
 
