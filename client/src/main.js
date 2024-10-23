@@ -1,196 +1,18 @@
-var GLOBAL_SPEED = 0.006;
-var VIEWPORT_RADIUS = 30;
-var MAX_ZOOM = 10000;
-var BLOCKS_ON_SCREEN = 1100;
-// var BLOCKS_ON_SCREEN = 20000;
-var WAIT_FOR_DISCONNECTED_MS = 1000;
-var USERNAME_SIZE = 6;
+//#region constants
+const GLOBAL_SPEED = 0.006;
+const VIEWPORT_RADIUS = 30;
+const MAX_ZOOM = 10000;
+const BLOCKS_ON_SCREEN = 1100;
+// const BLOCKS_ON_SCREEN = 20000;
+const WAIT_FOR_DISCONNECTED_MS = 1000;
+const USERNAME_SIZE = 6;
+const SKIN_BLOCK_COUNT = 13;
+const SKIN_PATTERN_COUNT = 28;
 
-//stackoverflow.com/a/15666143/3625298
-var MAX_PIXEL_RATIO = (function () {
-	var ctx = document.createElement("canvas").getContext("2d"),
-		dpr = window.devicePixelRatio || 1,
-		bsr = ctx.webkitBackingStorePixelRatio ||
-			ctx.mozBackingStorePixelRatio ||
-			ctx.msBackingStorePixelRatio ||
-			ctx.oBackingStorePixelRatio ||
-			ctx.backingStorePixelRatio || 1;
-
-	return dpr / bsr;
-})();
-
-var DeviceTypes = {
-	DESKTOP: 0,
-	IOS: 1,
-	ANDROID: 2,
-};
-
-var deviceType = (function () {
-	if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) {
-		return DeviceTypes.IOS;
-	}
-	if (navigator.userAgent.toLowerCase().indexOf("android") > -1) {
-		return DeviceTypes.ANDROID;
-	}
-	return DeviceTypes.DESKTOP;
-})();
-testHashForMobile();
-
-var patreonQueryWasFound = checkPatreonQuery();
-
-function redirectQuery() {
-	var hashIndex = location.href.indexOf("#");
-	var queryIndex = location.href.indexOf("?");
-	if ((queryIndex >= 0 && (hashIndex == -1 || queryIndex < hashIndex)) || isIframe()) {
-		if (!patreonQueryWasFound || isIframe()) {
-			var allowedSearchParams = ["gp", "siteId", "channelId", "siteLocale", "storageId"];
-			var query = parseQuery(location.href);
-			for (var key in query) {
-				if (query.hasOwnProperty(key)) {
-					if (allowedSearchParams.indexOf(key) == -1) {
-						delete query[key];
-					}
-				}
-			}
-
-			if (isIframe()) {
-				query["gp"] = "1";
-				query["siteId"] = window.location.hostname;
-				query["channelId"] = "1";
-				query["siteLocale"] = "en_EN";
-				query["storageId"] = "72167631167";
-			}
-
-			var queryArr = [];
-			for (var key in query) {
-				if (query.hasOwnProperty(key)) {
-					queryArr.push(window.encodeURIComponent(key) + "=" + window.encodeURIComponent(query[key]));
-				}
-			}
-			var queryString = queryArr.join("&");
-			if (queryString) queryString = "?" + queryString;
-			var newLocation = location.href.split("?")[0] + queryString;
-			if (newLocation != location.href) {
-				location.href = newLocation;
-			}
-		}
-	}
-}
-redirectQuery();
-
-function isIframe() {
-	try {
-		return window.self !== window.top;
-	} catch (e) {
-		return true;
-	}
-}
-
-// Some dated code is using these in places like `for(i = 0`.
-// While ideally these variables should all be made local,
-// I'm worried some locations actually rely on them not being local.
-// So for now these are all global, but we should slowly try to get rid of these.
-var i, w;
-
-var IS_SECURE = location.protocol.indexOf("https") >= 0;
-// if(IS_SECURE && (["#nohttpsredirect", "#pledged"].indexOf(location.hash) < 0) && !isIframe() && !patreonQueryWasFound){
-// 	location.protocol = "http:";
-// }
-var SECURE_WS = IS_SECURE ? "wss://" : "ws://";
-
-// var flashIsInstalled = false;
-// try {
-// 	flashIsInstalled = Boolean(new ActiveXObject('ShockwaveFlash.ShockwaveFlash'));
-// } catch(exception) {
-// 	flashIsInstalled = ('undefined' != typeof navigator.mimeTypes['application/x-shockwave-flash']);
-// }
-// ga('set', 'dimension1', flashIsInstalled ? 'yes': 'no');
-var SKIN_BLOCK_COUNT = 13;
-var SKIN_PATTERN_COUNT = 28;
-var ws = null, mainCanvas, ctx, prevTimeStamp = null, blocks = [], players = [];
-var camPos = [0, 0], camPosSet = false, camPosPrevFrame = [0, 0], myNameAlphaTimer = 0;
-var myPos = null,
-	myPlayer = null,
-	changeDirAt = null,
-	changeDirAtIsHorizontal = false,
-	myNextDir = 0,
-	lastChangedDirPos = null;
-var lastClientsideMoves = [],
-	trailPushesDuringRequest = [],
-	isRequestingMyTrail = false,
-	skipTrailRequestResponse = false;
-var mapSize = 2000, closedBecauseOfDeath = false, minimapCtx, beginScreenVisible = true, wsOnOpenTime;
-var minimapCanvas;
-var canvasQuality = 1,
-	currentDtCap = 0,
-	totalDeltaTimeFromCap = 0,
-	deltaTime = 16.66,
-	lerpedDeltaTime = 16.66,
-	missedFrames = [],
-	gainedFrames = [];
-var myScoreElem,
-	myKillsElem,
-	myRealScoreElem,
-	myRankElem,
-	myRank = 0,
-	myRankSent = false,
-	totalPlayersElem,
-	totalPlayers = 0;
-var leaderboardElem, leaderboardDivElem, leaderboardHidden = localStorage.leaderboardHidden == "true";
-var miniMapPlayer,
-	playUI,
-	beginScreen,
-	notificationElem,
-	formElem,
-	nameInput,
-	lastNameValue = "",
-	lastNameChangeCheck = 0;
-var scoreStatTarget = 25, scoreStat = 25, realScoreStatTarget = 25, realScoreStat = 25;
-var linesCanvas, linesCtx, tempCanvas, tempCtx;
-var showCouldntConnectAfterTransition = false, playingAndReady = false, canRunAds = false;
-var transitionCanvas,
-	tCtx,
-	transitionTimer = 0,
-	transitionPrevTimer = 0,
-	transitionDirection = 1,
-	transitionText = "GAME OVER";
-var isTransitioning = false, transitionCallback1 = null, transitionCallback2 = null, transitionReverseOnHalf = false;
-var tutorialCanvas, tutCtx, tutorialTimer = 0, tutorialPrevTimer = 0, tutorialBlocks, tutorialPlayers, tutorialText;
-var touchControlsElem;
-var skinButtonCanvas, skinButtonCtx, skinButtonBlocks = [], skinButtonShadow;
-var skinCanvas, skinCtx, skinScreen, skinScreenVisible = false, skinScreenBlocks;
-var titCanvas, titCtx, titleTimer = -1, resetTitleNextFrame = true, titleLastRender = 0;
-var currentTouches = [], doRefreshAfterDie = false, pressedKeys = [];
-var camPosOffset = [0, 0], camRotOffset = 0, camShakeForces = [];
-var honkStartTime = undefined, lastHonkTime = 0, honkSfx = null;
-var skipDeathTransition = false, allowSkipDeathTransition = false, deathTransitionTimeout = null;
-var thisServerAvgPing = 0,
-	thisServerDiffPing = 0,
-	thisServerLastPing = 0,
-	lastPingTime = 0,
-	waitingForPing = false;
-var closeNotification = null, connectionLostNotification = null;
-var lastMyPosSetClientSideTime = 0,
-	lastMyPosServerSideTime = 0,
-	lastMyPosSetValidClientSideTime = 0,
-	lastMyPosHasBeenConfirmed = false;
-var uiElems = [], zoom, myColorId, uglyMode = false;
-var hasReceivedChunkThisGame = false, didSendSecondReady = false;
-var lastStatBlocks = 0,
-	lastStatKills = 0,
-	lastStatLbRank = 0,
-	lastStatAlive = 0,
-	lastStatNo1Time = 0,
-	lastStatDeathType = 0,
-	lastStatKiller = "";
-var bestStatBlocks = 0, bestStatKills = 0, bestStatLbRank = 0, bestStatAlive = 0, bestStatNo1Time = 0;
-var lastStatTimer = 0, lastStatCounter = 0, lastStatValueElem, bestStatValueElem;
-var lastMousePos = [0, 0], mouseHidePos = [0, 0];
-var joinButton,
-	gamemodeDropDownEl;
-var didConfirmOpenInApp = false;
-
-var receiveAction = {
+/**
+ * @enum {number} Actions received from the server.
+ */
+const receiveAction = Object.freeze({
 	UPDATE_BLOCKS: 1,
 	PLAYER_POS: 2,
 	FILL_AREA: 3,
@@ -214,9 +36,12 @@ var receiveAction = {
 	PONG: 21,
 	UNDO_PLAYER_DIE: 22,
 	TEAM_LIFE_COUNT: 23,
-};
+});
 
-var sendAction = {
+/**
+ * @enum {number} Actions sent to the server.
+ */
+const sendAction = Object.freeze({
 	UPDATE_DIR: 1,
 	SET_USERNAME: 2,
 	SKIN: 3,
@@ -229,9 +54,9 @@ var sendAction = {
 	SET_TEAM_USERNAME: 10,
 	VERSION: 11,
 	PATREON_CODE: 12,
-};
+});
 
-var colors = {
+const colors = {
 	grey: {
 		BG: "#3a342f",
 		brighter: "#4e463f",
@@ -334,7 +159,7 @@ var colors = {
 	},
 };
 
-var titleLines = [
+const titleLines = [
 	{ //S
 		line: [[86, 82], [50, 57, 25, 99, 65, 105], [110, 110, 80, 158, 42, 129]],
 		speed: 1,
@@ -409,6 +234,184 @@ var titleLines = [
 	},
 ];
 
+const DeviceTypes = Object.freeze({
+	DESKTOP: 0,
+	IOS: 1,
+	ANDROID: 2,
+});
+
+//#endregion constants
+
+//stackoverflow.com/a/15666143/3625298
+var MAX_PIXEL_RATIO = (function () {
+	var ctx = document.createElement("canvas").getContext("2d"),
+		dpr = window.devicePixelRatio || 1,
+		bsr = ctx.webkitBackingStorePixelRatio ||
+			ctx.mozBackingStorePixelRatio ||
+			ctx.msBackingStorePixelRatio ||
+			ctx.oBackingStorePixelRatio ||
+			ctx.backingStorePixelRatio || 1;
+
+	return dpr / bsr;
+})();
+
+var deviceType = (function () {
+	if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) {
+		return DeviceTypes.IOS;
+	}
+	if (navigator.userAgent.toLowerCase().indexOf("android") > -1) {
+		return DeviceTypes.ANDROID;
+	}
+	return DeviceTypes.DESKTOP;
+})();
+testHashForMobile();
+
+var patreonQueryWasFound = checkPatreonQuery();
+
+function redirectQuery() {
+	var hashIndex = location.href.indexOf("#");
+	var queryIndex = location.href.indexOf("?");
+	if ((queryIndex >= 0 && (hashIndex == -1 || queryIndex < hashIndex)) || isIframe()) {
+		if (!patreonQueryWasFound || isIframe()) {
+			var allowedSearchParams = ["gp", "siteId", "channelId", "siteLocale", "storageId"];
+			var query = parseQuery(location.href);
+			for (var key in query) {
+				if (query.hasOwnProperty(key)) {
+					if (allowedSearchParams.indexOf(key) == -1) {
+						delete query[key];
+					}
+				}
+			}
+
+			if (isIframe()) {
+				query["gp"] = "1";
+				query["siteId"] = window.location.hostname;
+				query["channelId"] = "1";
+				query["siteLocale"] = "en_EN";
+				query["storageId"] = "72167631167";
+			}
+
+			var queryArr = [];
+			for (var key in query) {
+				if (query.hasOwnProperty(key)) {
+					queryArr.push(window.encodeURIComponent(key) + "=" + window.encodeURIComponent(query[key]));
+				}
+			}
+			var queryString = queryArr.join("&");
+			if (queryString) queryString = "?" + queryString;
+			var newLocation = location.href.split("?")[0] + queryString;
+			if (newLocation != location.href) {
+				location.href = newLocation;
+			}
+		}
+	}
+}
+redirectQuery();
+
+function isIframe() {
+	try {
+		return window.self !== window.top;
+	} catch (e) {
+		return true;
+	}
+}
+
+// Some dated code is using these in places like `for(i = 0`.
+// While ideally these variables should all be made local,
+// I'm worried some locations actually rely on them not being local.
+// So for now these are all global, but we should slowly try to get rid of these.
+var i, w;
+
+const IS_SECURE = location.protocol.indexOf("https") >= 0;
+const SECURE_WS = IS_SECURE ? "wss://" : "ws://";
+
+var mainCanvas, ctx, prevTimeStamp = null, blocks = [], players = [];
+var camPos = [0, 0], camPosSet = false, camPosPrevFrame = [0, 0], myNameAlphaTimer = 0;
+var myPos = null,
+	myPlayer = null,
+	changeDirAt = null,
+	changeDirAtIsHorizontal = false,
+	myNextDir = 0,
+	lastChangedDirPos = null;
+var lastClientsideMoves = [],
+	isRequestingMyTrail = false,
+	skipTrailRequestResponse = false;
+var mapSize = 2000, closedBecauseOfDeath = false, minimapCtx, beginScreenVisible = true, wsOnOpenTime;
+var minimapCanvas;
+var canvasQuality = 1,
+	currentDtCap = 0,
+	totalDeltaTimeFromCap = 0,
+	deltaTime = 16.66,
+	lerpedDeltaTime = 16.66,
+	missedFrames = [],
+	gainedFrames = [];
+var myScoreElem,
+	myKillsElem,
+	myRealScoreElem,
+	myRankElem,
+	myRank = 0,
+	myRankSent = false,
+	totalPlayersElem,
+	totalPlayers = 0;
+var leaderboardElem, leaderboardDivElem, leaderboardHidden = localStorage.leaderboardHidden == "true";
+var miniMapPlayer,
+	playUI,
+	beginScreen,
+	notificationElem,
+	formElem,
+	nameInput,
+	lastNameValue = "",
+	lastNameChangeCheck = 0;
+var scoreStatTarget = 25, scoreStat = 25, realScoreStatTarget = 25, realScoreStat = 25;
+var linesCanvas, linesCtx, tempCanvas, tempCtx;
+var showCouldntConnectAfterTransition = false, playingAndReady = false, canRunAds = false;
+var transitionCanvas,
+	tCtx,
+	transitionTimer = 0,
+	transitionPrevTimer = 0,
+	transitionDirection = 1,
+	transitionText = "GAME OVER";
+var isTransitioning = false, transitionCallback1 = null, transitionCallback2 = null, transitionReverseOnHalf = false;
+var tutorialCanvas, tutCtx, tutorialTimer = 0, tutorialPrevTimer = 0, tutorialBlocks, tutorialPlayers, tutorialText;
+var touchControlsElem;
+var skinButtonCanvas, skinButtonCtx, skinButtonBlocks = [], skinButtonShadow;
+var skinCanvas, skinCtx, skinScreen, skinScreenVisible = false, skinScreenBlocks;
+var titCanvas, titCtx, titleTimer = -1, resetTitleNextFrame = true, titleLastRender = 0;
+var currentTouches = [], doRefreshAfterDie = false, pressedKeys = [];
+var camPosOffset = [0, 0], camRotOffset = 0, camShakeForces = [];
+var honkStartTime = undefined, lastHonkTime = 0, honkSfx = null;
+var skipDeathTransition = false, allowSkipDeathTransition = false, deathTransitionTimeout = null;
+var thisServerAvgPing = 0,
+	thisServerDiffPing = 0,
+	thisServerLastPing = 0,
+	lastPingTime = 0,
+	waitingForPing = false;
+var closeNotification = null, connectionLostNotification = null;
+var lastMyPosSetClientSideTime = 0,
+	lastMyPosServerSideTime = 0,
+	lastMyPosSetValidClientSideTime = 0,
+	lastMyPosHasBeenConfirmed = false;
+var uiElems = [], zoom, myColorId, uglyMode = false;
+var hasReceivedChunkThisGame = false, didSendSecondReady = false;
+var lastStatBlocks = 0,
+	lastStatKills = 0,
+	lastStatLbRank = 0,
+	lastStatAlive = 0,
+	lastStatNo1Time = 0,
+	lastStatDeathType = 0,
+	lastStatKiller = "";
+var bestStatBlocks = 0, bestStatKills = 0, bestStatLbRank = 0, bestStatAlive = 0, bestStatNo1Time = 0;
+var lastStatTimer = 0, lastStatCounter = 0, lastStatValueElem, bestStatValueElem;
+var lastMousePos = [0, 0], mouseHidePos = [0, 0];
+var joinButton,
+	gamemodeDropDownEl;
+var didConfirmOpenInApp = false;
+//called by form, connects with transition and error handling
+var isConnectingWithTransition = false;
+
+/**@type {GameConnection?} */
+let game_connection = null;
+
 function addSocketWrapper() {
 	if (typeof WebSocket == "undefined") {
 		return;
@@ -470,25 +473,6 @@ function simpleRequest(url, cb) {
 	};
 	req.open("GET", url, true);
 	req.send();
-}
-
-function trackGameStart() {
-	// var idString = "";
-	// if(localStorage.playId){
-	// 	idString = "&id="+localStorage.playId;
-	// }else{
-	// 	//test if local storage is available
-	// 	lsSet("playId","test");
-	// 	if(localStorage.playId != "test"){
-	// 		//doesn't work, set playId to do not track
-	// 		idString = "&id=donottrack";
-	// 	}
-	// }
-	// simpleRequest("http://stats.splix.io/play.php?type=0"+idString, function(response){
-	// 	if(response){
-	// 		lsSet("playId", response);
-	// 	}
-	// });
 }
 
 function countPlayGame() {
@@ -919,53 +903,15 @@ function checkUsername(name) {
 	}
 }
 
-//sends name to websocket
-function sendName() {
-	var n = nameInput.value;
-	if (n !== undefined && n !== null && n !== "" && n.trim() !== "") {
-		wsSendMsg(sendAction.SET_USERNAME, n);
-	}
-}
-
 function nameInputOnChange() {
 	lsSet("name", nameInput.value);
-}
-
-//sends a legacy message which is required for older servers
-function sendLegacyVersion() {
-	wsSendMsg(sendAction.VERSION, {
-		type: 0,
-		ver: 28,
-	});
-}
-
-//sends current skin to websocket
-function sendSkin() {
-	var blockColor = localStorage.getItem("skinColor");
-	if (blockColor === null) {
-		blockColor = 0;
-	}
-	var pattern = localStorage.getItem("skinPattern");
-	if (pattern === null) {
-		pattern = 0;
-	}
-	wsSendMsg(sendAction.SKIN, {
-		blockColor: blockColor,
-		pattern: pattern,
-	});
-}
-
-function sendPatreonCode() {
-	if (localStorage.patreonLastSplixCode !== "" && localStorage.patreonLastSplixCode !== undefined) {
-		wsSendMsg(sendAction.PATREON_CODE, localStorage.patreonLastSplixCode);
-	}
 }
 
 //sends new direction to websocket
 var lastSendDir = -1, lastSendDirTime = 0; //used to prevent spamming buttons
 function sendDir(dir, skipQueue) {
 	// console.log("======sendDir",dir, skipQueue);
-	if (!ws || !myPos) {
+	if (!game_connection || !myPos) {
 		return false;
 	}
 	//myPlayer doesn't exist
@@ -1057,7 +1003,7 @@ function sendDir(dir, skipQueue) {
 	}
 	lastMyPosHasBeenConfirmed = false;
 	// console.log("send ======= UPDATE_DIR ======",dir,newPos);
-	wsSendMsg(sendAction.UPDATE_DIR, {
+	game_connection.wsSendMsg(sendAction.UPDATE_DIR, {
 		dir: dir,
 		coord: newPos,
 	});
@@ -1100,12 +1046,6 @@ function changeMyDir(dir, newPos, extendTrail, isClientside) {
 	}
 }
 
-function startRequestMyTrail() {
-	isRequestingMyTrail = true;
-	trailPushesDuringRequest = [];
-	wsSendMsg(sendAction.REQUEST_MY_TRAIL);
-}
-
 function trailPush(player, pos) {
 	if (player.trails.length > 0) {
 		var lastTrail = player.trails[player.trails.length - 1].trail;
@@ -1119,7 +1059,7 @@ function trailPush(player, pos) {
 				}
 				lastTrail.push(pos);
 				if (player.isMyPlayer && isRequestingMyTrail) {
-					trailPushesDuringRequest.push(pos);
+					game_connection.trailPushesDuringRequest.push(pos);
 				}
 			}
 		}
@@ -1133,7 +1073,6 @@ function honkStart() {
 }
 
 function honkEnd() {
-	console.log("Honking");
 	var now = Date.now();
 	if (now > lastHonkTime && honkStartTime !== undefined) {
 		var time = now - honkStartTime;
@@ -1143,7 +1082,7 @@ function honkEnd() {
 		time = iLerp(0, 1000, time);
 		time *= 255;
 		time = Math.floor(time);
-		wsSendMsg(sendAction.HONK, time);
+		game_connection.wsSendMsg(sendAction.HONK, time);
 		for (var playerI = 0; playerI < players.length; playerI++) {
 			var player = players[playerI];
 			if (player.isMyPlayer) {
@@ -1154,19 +1093,7 @@ function honkEnd() {
 }
 
 //when page is finished loading
-window.onload = function () {
-	//piwik
-	// _paq = _paq || [];
-	// _paq.push(["setDomains", ["*.splix.io"]]);
-	// _paq.push(['trackPageView']);
-	// _paq.push(['enableLinkTracking']);
-	// (function() {
-	//   var u="//139.59.211.221/";
-	//   _paq.push(['setTrackerUrl', u+'piwik.php']);
-	//   _paq.push(['setSiteId', '1']);
-	//   var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
-	//   g.type='text/javascript'; g.async=true; g.defer=true; g.src=u+'piwik.js'; s.parentNode.insertBefore(g,s);
-	// })();
+window.addEventListener('load', function () {
 
 	mainCanvas = document.getElementById("mainCanvas");
 	ctx = mainCanvas.getContext("2d");
@@ -1291,26 +1218,7 @@ window.onload = function () {
 		"color: #a22929; font-size: 50px; font-family: arial; text-shadow: 1px 1px #7b1e1e, 2px 2px #7b1e1e;",
 		"",
 	);
-};
-
-//when WebSocket connection is established
-function onOpen() {
-	isConnecting = false;
-	document.body.dataset.state="playing";
-	sendLegacyVersion();
-	sendPatreonCode();
-	sendName();
-	sendSkin();
-	wsSendMsg(sendAction.READY);
-	if (playingAndReady) {
-		onConnectOrMiddleOfTransition();
-	}
-	// ga("send","event","Game","game_start");
-	trackGameStart();
-	countPlayGame();
-	// _paq.push(['trackEvent', 'Game', 'game_start']);
-	wsOnOpenTime = Date.now();
-}
+});
 
 //called when successfully connected and when the transition is full screen
 function onConnectOrMiddleOfTransition() {
@@ -1387,8 +1295,8 @@ function showBeginHideSkin() {
 
 //when WebSocket connection is closed
 function onClose() {
-	if (!!ws && ws.readyState == WebSocket.OPEN) {
-		ws.close();
+	if (!!game_connection && game_connection.ws.readyState == WebSocket.OPEN) {
+		game_connection.ws.close();
 	}
 	if (!playingAndReady) {
 		if (!isTransitioning) {
@@ -1403,13 +1311,11 @@ function onClose() {
 		// ga("send","event","Game","lost_connection_mid_game");
 		// _paq.push(['trackEvent', 'Game', 'lost_connection_mid_game']);
 		setNotification("The connection was lost :/");
-	} else { //disconnect because of death
-		// var gameTime = Date.now() - wsOnOpenTime;
-		// ga("send","timing","Game","game_session_time", gameTime);
-		// _paq.push(['trackEvent', 'Game', 'game_session', 'time', gameTime]);
+	} else {
+		//disconnect because of death 
 	}
-	ws = null;
-	isConnecting = false;
+	game_connection.ws = null;
+	game_connection.isConnecting = false;
 }
 
 //if trying to establish a connection but failed
@@ -1423,8 +1329,6 @@ function couldntConnect() {
 	return true;
 }
 
-//called by form, connects with transition and error handling
-var isConnectingWithTransition = false;
 function connectWithTransition(dontDoAds) {
 	if (!isConnectingWithTransition) {
 		isConnectingWithTransition = true;
@@ -1447,569 +1351,641 @@ function connectWithTransition(dontDoAds) {
 	}
 }
 
-//starts websocket connection
-//return true if it should start the transition on submit
-var isConnecting = false;
-function doConnect(dontDoAds) {
-	if (!ws && !isConnecting && !isTransitioning) {
-		isConnecting = true;
-		showCouldntConnectAfterTransition = false;
-		closedBecauseOfDeath = false;
-		// if(!serversRequestDone){
-		// 	console.log("set true 2 ");
-		// 	doConnectAfterServersGet = true;
-		// 	return true;
+class GameConnection {
+	ws;
+	isConnecting = true;
+	url;
+	serverAvgPing = 0;
+	serverLastPing = 0;
+	closedBecauseOfDeath = false;
+	isRequestingMyTrail = false;
+	trailPushesDuringRequest = [];
+	/** @type {number}  time stamp of the opening of the websocket connection */
+	onOpenTime;
+	constructor(url){
+		this.url = url;
+		showCouldntConnectAfterTransition = false; // TODO
+		this.ws = new WebSocket(url);
+		this.ws.binaryType = "arraybuffer";
+		const that = this;
+		this.ws.onmessage = function (evt) {
+			if (that.ws == this) {
+				that.onMessage(evt);
+			}
+		};
+		this.ws.onclose = function (evt) {
+			if (that.ws == this) {
+				onClose(evt);
+			}
+		};
+		this.ws.onopen = function (evt) {
+			if (that.ws == this) {
+				that.onOpen(evt);				
+			}
+		};
+	}
+	
+	//when WebSocket connection is established
+	onOpen(evt){
+		this.isConnecting = false;
+		document.body.dataset.state="playing";
+		this.sendLegacyVersion();
+		this.sendPatreonCode();
+		this.sendName();
+		this.sendSkin();
+		this.wsSendMsg(sendAction.READY);
+		if (playingAndReady) {
+			onConnectOrMiddleOfTransition();
+		}
+		countPlayGame();
+		this.onOpenTime = Date.now();
+	}
+
+	//sends a legacy message which is required for older servers
+	sendLegacyVersion() {
+		this.wsSendMsg(sendAction.VERSION, {
+			type: 0,
+			ver: 28,
+		});
+	}
+
+	//sends current skin to websocket
+	sendSkin() {
+		let blockColor = localStorage.getItem("skinColor");
+		if (blockColor === null) {
+			blockColor = 0;
+		}
+		let pattern = localStorage.getItem("skinPattern");
+		if (pattern === null) {
+			pattern = 0;
+		}
+		this.wsSendMsg(sendAction.SKIN, {
+			blockColor: blockColor,
+			pattern: pattern,
+		});
+	}
+
+	sendPatreonCode() {
+		const patreonLastSplixCode = localStorage.patreonLastSplixCode;
+		if (patreonLastSplixCode !== "" && patreonLastSplixCode !== undefined) {
+			this.wsSendMsg(sendAction.PATREON_CODE, patreonLastSplixCode);
+		}
+	}
+
+	//sends name to websocket
+	sendName() {
+		var n = nameInput.value;
+		if (n !== undefined && n !== null && n !== "" && n.trim() !== "") {
+			this.wsSendMsg(sendAction.SET_USERNAME, n);
+		}
+	}
+
+	startRequestMyTrail() {
+		this.isRequestingMyTrail = true;
+		this.trailPushesDuringRequest = [];
+		this.wsSendMsg(sendAction.REQUEST_MY_TRAIL);
+	}
+	
+	/**
+	 * send a message to the websocket, returns true if successful
+	 * @param {sendAction} action
+	 * @param {Record<string,any>} data 
+	 * @returns {bool} `true` if successful
+	 */
+	wsSendMsg(action, data) {
+		let utf8Array;
+		if (this.ws.readyState == WebSocket.OPEN) {
+			const array = [action];
+			if (action == sendAction.UPDATE_DIR) {
+				array.push(data.dir);
+				const coordBytesX = intToBytes(data.coord[0], 2);
+				array.push(coordBytesX[0]);
+				array.push(coordBytesX[1]);
+				const coordBytesY = intToBytes(data.coord[1], 2);
+				array.push(coordBytesY[0]);
+				array.push(coordBytesY[1]);
+			}
+			else if (
+				action == sendAction.SET_USERNAME || action == sendAction.SET_TEAM_USERNAME ||
+				action == sendAction.PATREON_CODE
+			){
+				utf8Array = toUTF8Array(data);
+				array.push.apply(array, utf8Array);
+			}
+			else if (action == sendAction.SKIN) {
+				array.push(data.blockColor);
+				array.push(data.pattern);
+			}
+			else if (action == sendAction.REQUEST_CLOSE) {
+				for (var i = 0; i < data.length; i++) {
+					array.push(data[i]);
+				}
+			}
+			else if (action == sendAction.HONK) {
+				array.push(data);
+			}
+			else if (action == sendAction.MY_TEAM_URL) {
+				utf8Array = toUTF8Array(data);
+				array.push.apply(array, utf8Array);
+			}
+			else if (action == sendAction.VERSION) {
+				array.push(data.type);
+				var verBytes = intToBytes(data.ver, 2);
+				array.push(verBytes[0]);
+				array.push(verBytes[1]);
+			}
+			const payload = new Uint8Array(array);
+			try {
+				this.ws.send(payload);
+				return true;
+			} catch (ex) {
+				console.log("error sending message", action, data, array, ex);
+			}
+		}
+		return false;
+	}
+
+	//when receiving a message from the websocket
+	onMessage(evt) {
+		// console.log(evt);
+		let x, y, type, id, player, w, h, block, i, j, nameBytes;
+		let data = new Uint8Array(evt.data);
+		// console.log(evt.data);
+		// for(var key in receiveAction){
+		// 	if(receiveAction[key] == data[0]){
+		// 		console.log(key);
+		// 	}
 		// }
-		var server = getSelectedServer();
+		if (data[0] == receiveAction.UPDATE_BLOCKS) {
+			const x = bytesToInt(data[1], data[2]);
+			const y = bytesToInt(data[3], data[4]);
+			const type = data[5];
+			const block = getBlock(x, y);
+			block.setBlockId(type);
+		}
+		if (data[0] == receiveAction.PLAYER_POS) {
+			const x = bytesToInt(data[1], data[2]);
+			const y = bytesToInt(data[3], data[4]);
+			const id = bytesToInt(data[5], data[6]);
+			const player = getPlayer(id);
+			player.hasReceivedPosition = true;
+			player.moveRelativeToServerPosNextFrame = true;
+			player.lastServerPosSentTime = Date.now();
+			lastMyPosHasBeenConfirmed = true;
+			let newDir = data[7];
+			let newPos = [x, y];
+			let newPosOffset = [x, y];
+
+			//add distance traveled during server delay (ping/2)
+			let posOffset = 0;
+			if (player.isMyPlayer || this.serverAvgPing > 50) {
+				posOffset = this.serverAvgPing / 2 * GLOBAL_SPEED;
+			}
+			movePos(newPosOffset, newDir, posOffset);
+
+			let doSetPos = true;
+			if (player.isMyPlayer) {
+				lastMyPosServerSideTime = Date.now();
+				// console.log("current dir:",player.dir, "myNextDir", myNextDir, "newDir", newDir);
+				// console.log("newPosOffset",newPosOffset, "player.pos", player.pos);
+
+				//if dir and pos are close enough to the current dir and pos
+				if (
+					(player.dir == newDir || myNextDir == newDir) &&
+					Math.abs(newPosOffset[0] - player.pos[0]) < 1 &&
+					Math.abs(newPosOffset[1] - player.pos[1]) < 1
+				) {
+					// console.log("newPosOffset",newPosOffset);
+					// console.log("doSetPos is false because dir and pos are close enough to current dir and pos");
+					doSetPos = false;
+				}
+
+				//if dir and pos are the first item of lastClientsideMoves
+				//when two movements are made shortly after each other the
+				//previous check (dir && pos) won't suffice, eg:
+				// client makes move #1
+				// client makes move #2
+				// receives move #1 <-- different from current dir & pos
+				// recieves move #2
+				// console.log(lastClientsideMoves);
+				if (lastClientsideMoves.length > 0) {
+					var lastClientsideMove = lastClientsideMoves.shift();
+					if (
+						lastClientsideMove.dir == newDir &&
+						lastClientsideMove.pos[0] == newPos[0] &&
+						lastClientsideMove.pos[1] == newPos[1]
+					) {
+						doSetPos = false;
+						// console.log("new dir is same as last isClientside move");
+						// console.log("doSetPos = false;");
+					} else {
+						lastClientsideMoves = [];
+						// console.log("empty lastClientsideMoves");
+					}
+				}
+
+				if (player.dir == 4 || newDir == 4) { //is paused or is about to be paused
+					// console.log("player.dir == 4 or newDir == 4, doSetPos = true");
+					doSetPos = true;
+				}
+
+				// console.log("doSetPos:",doSetPos);
+				if (doSetPos) {
+					// console.log("==================doSetPos is true================");
+					myNextDir = newDir;
+					changeMyDir(newDir, newPos, false, false);
+					//doSetPos is true, so the server thinks the player is somewhere
+					//else than the client thinks he is. To prevent the trail from
+					//getting messed up, request the full trail
+					this.startRequestMyTrail();
+					sendDirQueue = [];
+				}
+
+				//always set the server position
+				player.serverPos = [newPosOffset[0], newPosOffset[1]];
+				player.serverDir = newDir;
+
+				removeBlocksOutsideViewport(player.pos); // TODO Fog mode
+			} else {
+				player.dir = newDir;
+			}
+
+			if (doSetPos) {
+				player.pos = newPosOffset;
+				// console.log("doSetPos",newPosOffset);
+
+				var extendTrailFlagSet = data.length > 8;
+				if (extendTrailFlagSet) {
+					var extendTrail = data[8] == 1;
+					if (extendTrail) {
+						trailPush(player, newPos);
+					} else {
+						player.trails.push({
+							trail: [],
+							vanishTimer: 0,
+						});
+					}
+				}
+			}
+
+			if (!player.drawPosSet) {
+				player.drawPos = [player.pos[0], player.pos[1]];
+				player.drawPosSet = true;
+			}
+		}
+		if (data[0] == receiveAction.FILL_AREA) {
+			x = bytesToInt(data[1], data[2]);
+			y = bytesToInt(data[3], data[4]);
+			w = bytesToInt(data[5], data[6]);
+			h = bytesToInt(data[7], data[8]);
+			type = data[9];
+			const pattern = data[10];
+			const isEdgeChunk = data[11];
+			fillArea(x, y, w, h, type, pattern, undefined, isEdgeChunk);
+		}
+		if (data[0] == receiveAction.SET_TRAIL) {
+			id = bytesToInt(data[1], data[2]);
+			player = getPlayer(id);
+			const newTrail = [];
+			//wether the new trail should replace the old trail (don't play animation)
+			//or append it to the trails list (do play animation)
+			var replace = false;
+			for (i = 3; i < data.length; i += 4) {
+				var coord = [bytesToInt(data[i], data[i + 1]), bytesToInt(data[i + 2], data[i + 3])];
+				newTrail.push(coord);
+			}
+			if (player.isMyPlayer) {
+				if (skipTrailRequestResponse) {
+					skipTrailRequestResponse = false;
+					game_connection.trailPushesDuringRequest = [];
+				} else {
+					if (isRequestingMyTrail) {
+						isRequestingMyTrail = false;
+						replace = true;
+						for (i = 0; i < game_connection.trailPushesDuringRequest.length; i++) {
+							newTrail.push(game_connection.trailPushesDuringRequest[i]);
+						}
+						game_connection.trailPushesDuringRequest = [];
+					}
+					//if last trail was emtpy (if entering enemy land) send a request for the new trail
+					if (player.trails.length > 0) {
+						var lastTrail = player.trails[player.trails.length - 1];
+						if (lastTrail.trail.length <= 0 && newTrail.length > 0) {
+							this.startRequestMyTrail();
+						}
+					}
+				}
+			}
+			if (replace) {
+				if (player.trails.length > 0) {
+					var last = player.trails[player.trails.length - 1];
+					last.trail = newTrail;
+					last.vanishTimer = 0;
+				} else {
+					replace = false;
+				}
+			}
+			if (!replace) {
+				player.trails.push({
+					trail: newTrail,
+					vanishTimer: 0,
+				});
+			}
+		}
+		if (data[0] == receiveAction.EMPTY_TRAIL_WITH_LAST_POS) {
+			id = bytesToInt(data[1], data[2]);
+			player = getPlayer(id);
+			if (player.trails.length > 0) {
+				var prevTrail = player.trails[player.trails.length - 1].trail;
+				if (prevTrail.length > 0) {
+					x = bytesToInt(data[3], data[4]);
+					y = bytesToInt(data[5], data[6]);
+					prevTrail.push([x, y]);
+				}
+			}
+
+			//fix for trailing while in own land
+			//when your ping is high and trail very short
+			//(one block or so) you'll start trailing
+			//in your own land. It's a ghost trail and you make
+			//ghost deaths every time you hit the line
+			if (player.isMyPlayer && isRequestingMyTrail) {
+				skipTrailRequestResponse = true;
+			}
+
+			player.trails.push({
+				trail: [],
+				vanishTimer: 0,
+			});
+		}
+		if (data[0] == receiveAction.PLAYER_DIE) {
+			id = bytesToInt(data[1], data[2]);
+			player = getPlayer(id);
+			if (data.length > 3) {
+				x = bytesToInt(data[3], data[4]);
+				y = bytesToInt(data[5], data[6]);
+				player.pos = [x, y];
+			}
+			player.die(true);
+		}
+		if (data[0] == receiveAction.CHUNK_OF_BLOCKS) {
+			x = bytesToInt(data[1], data[2]);
+			y = bytesToInt(data[3], data[4]);
+			w = bytesToInt(data[5], data[6]);
+			h = bytesToInt(data[7], data[8]);
+			i = 9;
+			for (j = x; j < x + w; j++) {
+				for (var k = y; k < y + h; k++) {
+					block = getBlock(j, k);
+					block.setBlockId(data[i], false);
+					i++;
+				}
+			}
+			if (!hasReceivedChunkThisGame) {
+				hasReceivedChunkThisGame = true;
+				this.wsSendMsg(sendAction.READY);
+				didSendSecondReady = true;
+			}
+		}
+		if (data[0] == receiveAction.REMOVE_PLAYER) {
+			id = bytesToInt(data[1], data[2]);
+			for (i = players.length - 1; i >= 0; i--) {
+				player = players[i];
+				if (id == player.id) {
+					players.splice(i, 1);
+				}
+			}
+		}
+		if (data[0] == receiveAction.PLAYER_NAME) {
+			id = bytesToInt(data[1], data[2]);
+			nameBytes = data.subarray(3, data.length);
+			var name = Utf8ArrayToStr(nameBytes);
+			player = getPlayer(id);
+			player.name = filter(name);
+		}
+		if (data[0] == receiveAction.MY_SCORE) {
+			var score = bytesToInt(data[1], data[2], data[3], data[4]);
+			var kills = 0;
+			if (data.length > 5) {
+				kills = bytesToInt(data[5], data[6]);
+			}
+			scoreStatTarget = score;
+			realScoreStatTarget = score + kills * 500;
+			myKillsElem.innerHTML = kills;
+		}
+		if (data[0] == receiveAction.MY_RANK) {
+			myRank = bytesToInt(data[1], data[2]);
+			myRankSent = true;
+			updateStats();
+		}
+		if (data[0] == receiveAction.LEADERBOARD) {
+			leaderboardElem.innerHTML = "";
+			totalPlayers = bytesToInt(data[1], data[2]);
+			updateStats();
+			i = 3;
+			var rank = 1;
+			while (true) {
+				if (i >= data.length) {
+					break;
+				}
+				var thisPlayerScore = bytesToInt(data[i], data[i + 1], data[i + 2], data[i + 3]);
+				var nameLen = data[i + 4];
+				nameBytes = data.subarray(i + 5, i + 5 + nameLen);
+				var thisPlayerName = Utf8ArrayToStr(nameBytes);
+
+				//create table row
+				var tr = document.createElement("tr");
+				tr.className = "scoreRank";
+				var rankElem = document.createElement("td");
+				rankElem.innerHTML = "#" + rank;
+				tr.appendChild(rankElem);
+				var nameElem = document.createElement("td");
+				nameElem.innerHTML = filter(htmlEscape(thisPlayerName));
+				tr.appendChild(nameElem);
+				var scoreElem = document.createElement("td");
+				scoreElem.innerHTML = thisPlayerScore;
+				tr.appendChild(scoreElem);
+				leaderboardElem.appendChild(tr);
+
+				i = i + 5 + nameLen;
+				rank++;
+			}
+			if (totalPlayers < 30 && doRefreshAfterDie && closeNotification === null) {
+				closeNotification = doTopNotification("This server is about to close, refresh to join a full server.");
+			}
+		}
+		if (data[0] == receiveAction.MAP_SIZE) {
+			mapSize = bytesToInt(data[1], data[2]);
+		}
+		if (data[0] == receiveAction.YOU_DED) {
+			if (data.length > 1) {
+				lastStatBlocks = bytesToInt(data[1], data[2], data[3], data[4]);
+				if (lastStatBlocks > bestStatBlocks) {
+					bestStatBlocks = lastStatBlocks;
+					lsSet("bestStatBlocks", bestStatBlocks);
+				}
+				lastStatKills = bytesToInt(data[5], data[6]);
+				if (lastStatKills > bestStatKills) {
+					bestStatKills = lastStatKills;
+					lsSet("bestStatKills", bestStatKills);
+				}
+				lastStatLbRank = bytesToInt(data[7], data[8]);
+				if ((lastStatLbRank < bestStatLbRank || bestStatLbRank <= 0) && lastStatLbRank > 0) {
+					bestStatLbRank = lastStatLbRank;
+					lsSet("bestStatLbRank", bestStatLbRank);
+				}
+				lastStatAlive = bytesToInt(data[9], data[10], data[11], data[12]);
+				if (lastStatAlive > bestStatAlive) {
+					bestStatAlive = lastStatAlive;
+					lsSet("bestStatAlive", bestStatAlive);
+				}
+				lastStatNo1Time = bytesToInt(data[13], data[14], data[15], data[16]);
+				if (lastStatNo1Time > bestStatNo1Time) {
+					bestStatNo1Time = lastStatNo1Time;
+					lsSet("bestStatNo1Time", bestStatNo1Time);
+				}
+				lastStatDeathType = data[17];
+				lastStatKiller = "";
+				document.getElementById("lastStats").style.display = null;
+				document.getElementById("bestStats").style.display = null;
+				lastStatCounter = 0;
+				lastStatTimer = 0;
+				lastStatValueElem.innerHTML = bestStatValueElem.innerHTML = "";
+				switch (lastStatDeathType) {
+					case 1:
+						if (data.length > 18) {
+							nameBytes = data.subarray(18, data.length);
+							lastStatKiller = Utf8ArrayToStr(nameBytes);
+						}
+						break;
+					case 2:
+						lastStatKiller = "the wall";
+						break;
+					case 3:
+						lastStatKiller = "yourself";
+						break;
+				}
+			}
+			closedBecauseOfDeath = true;
+			allowSkipDeathTransition = true;
+			deathTransitionTimeout = window.setTimeout(function () {
+				// resetAll();
+				if (skipDeathTransition) {
+					doTransition("", false, function () {
+						onClose();
+						resetAll();
+						connectWithTransition(true);
+					});
+				} else {
+					// console.log("before doTransition",isTransitioning);
+					doTransition("GAME OVER", true, null, function () {
+						onClose();
+						resetAll();
+					}, true);
+					// console.log("after doTransition",isTransitioning);
+				}
+				deathTransitionTimeout = null;
+			}, 1000);
+		}
+		if (data[0] == receiveAction.MINIMAP) {
+			var part = data[1];
+			var xOffset = part * 20;
+			minimapCtx.clearRect(xOffset * 2, 0, 40, 160);
+			minimapCtx.fillStyle = "#000000";
+			for (i = 1; i < data.length; i++) {
+				for (j = 0; j < 8; j++) {
+					var filled = (data[i] & (1 << j)) !== 0;
+					if (filled) {
+						var bitNumber = (i - 2) * 8 + j;
+						x = Math.floor(bitNumber / 80) % 80 + xOffset;
+						y = bitNumber % 80;
+						minimapCtx.fillRect(x * 2, y * 2, 2, 2);
+					}
+				}
+			}
+		}
+		if (data[0] == receiveAction.PLAYER_SKIN) {
+			id = bytesToInt(data[1], data[2]);
+			player = getPlayer(id);
+			if (player.isMyPlayer) {
+				myColorId = data[3];
+				colorUI();
+			}
+			player.skinBlock = data[3];
+		}
+		if (data[0] == receiveAction.READY) {
+			playingAndReady = true;
+			if (!isTransitioning) {
+				isTransitioning = true;
+				onConnectOrMiddleOfTransition();
+			}
+		}
+		if (data[0] == receiveAction.PLAYER_HIT_LINE) {
+			id = bytesToInt(data[1], data[2]);
+			player = getPlayer(id);
+			var pointsColor = getColorForBlockSkinId(data[3]);
+			x = bytesToInt(data[4], data[5]);
+			y = bytesToInt(data[6], data[7]);
+			var hitSelf = false;
+			if (data.length > 8) {
+				hitSelf = data[8] == 1;
+			}
+			player.addHitLine([x, y], pointsColor, hitSelf);
+			if (player.isMyPlayer && !hitSelf) {
+				doCamShakeDir(player.dir, 10, false);
+			}
+		}
+		if (data[0] == receiveAction.REFRESH_AFTER_DIE) {
+			doRefreshAfterDie = true;
+		}
+		if (data[0] == receiveAction.PLAYER_HONK) {
+			id = bytesToInt(data[1], data[2]);
+			player = getPlayer(id);
+			var time = data[3];
+			player.doHonk(time);
+		}
+		if (data[0] == receiveAction.PONG) {
+			var ping = Date.now() - lastPingTime;
+			var thisDiff = Math.abs(ping - thisServerLastPing);
+			thisServerDiffPing = Math.max(thisServerDiffPing, thisDiff);
+			thisServerDiffPing = lerp(thisDiff, thisServerDiffPing, 0.5);
+			thisServerAvgPing = lerp(thisServerAvgPing, ping, 0.5);
+			thisServerLastPing = ping;
+			lastPingTime = Date.now();
+			waitingForPing = false;
+		}
+		if (data[0] == receiveAction.UNDO_PLAYER_DIE) {
+			id = bytesToInt(data[1], data[2]);
+			player = getPlayer(id);
+			player.undoDie();
+		}
+		if (data[0] == receiveAction.TEAM_LIFE_COUNT) {
+			var currentLives = data[1];
+			var totalLives = data[2];
+			setLives(currentLives, totalLives);
+		}
+	}
+
+}
+
+function doConnect(dontDoAds) {
+	if (!game_connection && !isTransitioning) {
+		const server = getSelectedServer();
 		if (!server) {
 			onClose();
 			return false;
 		}
-		thisServerAvgPing = thisServerLastPing = 0;
-		ws = new WebSocket(server);
-		ws.binaryType = "arraybuffer";
-		ws.onmessage = function (evt) {
-			if (ws == this) {
-				onMessage(evt);
-			}
-		};
-		ws.onclose = function (evt) {
-			if (ws == this) {
-				onClose(evt);
-			}
-		};
-		ws.onopen = function (evt) {
-			if (ws == this) {
-				onOpen(evt);
-			}
-		};
-		return true;
-	}
-	return false;
-}
-
-//when receiving a message from the websocket
-function onMessage(evt) {
-	// console.log(evt);
-	var x, y, type, id, player, w, h, block, i, j, nameBytes;
-	var data = new Uint8Array(evt.data);
-	// console.log(evt.data);
-	// for(var key in receiveAction){
-	// 	if(receiveAction[key] == data[0]){
-	// 		console.log(key);
-	// 	}
-	// }
-	if (data[0] == receiveAction.UPDATE_BLOCKS) {
-		x = bytesToInt(data[1], data[2]);
-		y = bytesToInt(data[3], data[4]);
-		type = data[5];
-		block = getBlock(x, y);
-		block.setBlockId(type);
-	}
-	if (data[0] == receiveAction.PLAYER_POS) {
-		x = bytesToInt(data[1], data[2]);
-		y = bytesToInt(data[3], data[4]);
-		id = bytesToInt(data[5], data[6]);
-		player = getPlayer(id);
-		player.hasReceivedPosition = true;
-		player.moveRelativeToServerPosNextFrame = true;
-		player.lastServerPosSentTime = Date.now();
-		lastMyPosHasBeenConfirmed = true;
-		var newDir = data[7];
-		var newPos = [x, y];
-		var newPosOffset = [x, y];
-
-		//add distance traveled during server delay (ping/2)
-		var posOffset = 0;
-		if (player.isMyPlayer || thisServerAvgPing > 50) {
-			posOffset = thisServerAvgPing / 2 * GLOBAL_SPEED;
-		}
-		movePos(newPosOffset, newDir, posOffset);
-
-		var doSetPos = true;
-		if (player.isMyPlayer) {
-			lastMyPosServerSideTime = Date.now();
-			// console.log("current dir:",player.dir, "myNextDir", myNextDir, "newDir", newDir);
-			// console.log("newPosOffset",newPosOffset, "player.pos", player.pos);
-
-			//if dir and pos are close enough to the current dir and pos
-			if (
-				(player.dir == newDir || myNextDir == newDir) &&
-				Math.abs(newPosOffset[0] - player.pos[0]) < 1 &&
-				Math.abs(newPosOffset[1] - player.pos[1]) < 1
-			) {
-				// console.log("newPosOffset",newPosOffset);
-				// console.log("doSetPos is false because dir and pos are close enough to current dir and pos");
-				doSetPos = false;
-			}
-
-			//if dir and pos are the first item of lastClientsideMoves
-			//when two movements are made shortly after each other the
-			//previous check (dir && pos) won't suffice, eg:
-			// client makes move #1
-			// client makes move #2
-			// receives move #1 <-- different from current dir & pos
-			// recieves move #2
-			// console.log(lastClientsideMoves);
-			if (lastClientsideMoves.length > 0) {
-				var lastClientsideMove = lastClientsideMoves.shift();
-				if (
-					lastClientsideMove.dir == newDir &&
-					lastClientsideMove.pos[0] == newPos[0] &&
-					lastClientsideMove.pos[1] == newPos[1]
-				) {
-					doSetPos = false;
-					// console.log("new dir is same as last isClientside move");
-					// console.log("doSetPos = false;");
-				} else {
-					lastClientsideMoves = [];
-					// console.log("empty lastClientsideMoves");
-				}
-			}
-
-			if (player.dir == 4 || newDir == 4) { //is paused or is about to be paused
-				// console.log("player.dir == 4 or newDir == 4, doSetPos = true");
-				doSetPos = true;
-			}
-
-			// console.log("doSetPos:",doSetPos);
-			if (doSetPos) {
-				// console.log("==================doSetPos is true================");
-				myNextDir = newDir;
-				changeMyDir(newDir, newPos, false, false);
-				//doSetPos is true, so the server thinks the player is somewhere
-				//else than the client thinks he is. To prevent the trail from
-				//getting messed up, request the full trail
-				startRequestMyTrail();
-				sendDirQueue = [];
-			}
-
-			//always set the server position
-			player.serverPos = [newPosOffset[0], newPosOffset[1]];
-			player.serverDir = newDir;
-
-			removeBlocksOutsideViewport(player.pos);
-		} else {
-			player.dir = newDir;
-		}
-
-		if (doSetPos) {
-			player.pos = newPosOffset;
-			// console.log("doSetPos",newPosOffset);
-
-			var extendTrailFlagSet = data.length > 8;
-			if (extendTrailFlagSet) {
-				var extendTrail = data[8] == 1;
-				if (extendTrail) {
-					trailPush(player, newPos);
-				} else {
-					player.trails.push({
-						trail: [],
-						vanishTimer: 0,
-					});
-				}
-			}
-		}
-
-		if (!player.drawPosSet) {
-			player.drawPos = [player.pos[0], player.pos[1]];
-			player.drawPosSet = true;
-		}
-	}
-	if (data[0] == receiveAction.FILL_AREA) {
-		x = bytesToInt(data[1], data[2]);
-		y = bytesToInt(data[3], data[4]);
-		w = bytesToInt(data[5], data[6]);
-		h = bytesToInt(data[7], data[8]);
-		type = data[9];
-		const pattern = data[10];
-		const isEdgeChunk = data[11];
-		fillArea(x, y, w, h, type, pattern, undefined, isEdgeChunk);
-	}
-	if (data[0] == receiveAction.SET_TRAIL) {
-		id = bytesToInt(data[1], data[2]);
-		player = getPlayer(id);
-		var newTrail = [];
-		//wether the new trail should replace the old trail (don't play animation)
-		//or append it to the trails list (do play animation)
-		var replace = false;
-		for (i = 3; i < data.length; i += 4) {
-			var coord = [bytesToInt(data[i], data[i + 1]), bytesToInt(data[i + 2], data[i + 3])];
-			newTrail.push(coord);
-		}
-		if (player.isMyPlayer) {
-			if (skipTrailRequestResponse) {
-				skipTrailRequestResponse = false;
-				trailPushesDuringRequest = [];
-			} else {
-				if (isRequestingMyTrail) {
-					isRequestingMyTrail = false;
-					replace = true;
-					for (i = 0; i < trailPushesDuringRequest.length; i++) {
-						newTrail.push(trailPushesDuringRequest[i]);
-					}
-					trailPushesDuringRequest = [];
-				}
-				//if last trail was emtpy (if entering enemy land) send a request for the new trail
-				if (player.trails.length > 0) {
-					var lastTrail = player.trails[player.trails.length - 1];
-					if (lastTrail.trail.length <= 0 && newTrail.length > 0) {
-						startRequestMyTrail();
-					}
-				}
-			}
-		}
-		if (replace) {
-			if (player.trails.length > 0) {
-				var last = player.trails[player.trails.length - 1];
-				last.trail = newTrail;
-				last.vanishTimer = 0;
-			} else {
-				replace = false;
-			}
-		}
-		if (!replace) {
-			player.trails.push({
-				trail: newTrail,
-				vanishTimer: 0,
-			});
-		}
-	}
-	if (data[0] == receiveAction.EMPTY_TRAIL_WITH_LAST_POS) {
-		id = bytesToInt(data[1], data[2]);
-		player = getPlayer(id);
-		if (player.trails.length > 0) {
-			var prevTrail = player.trails[player.trails.length - 1].trail;
-			if (prevTrail.length > 0) {
-				x = bytesToInt(data[3], data[4]);
-				y = bytesToInt(data[5], data[6]);
-				prevTrail.push([x, y]);
-			}
-		}
-
-		//fix for trailing while in own land
-		//when your ping is high and trail very short
-		//(one block or so) you'll start trailing
-		//in your own land. It's a ghost trail and you make
-		//ghost deaths every time you hit the line
-		if (player.isMyPlayer && isRequestingMyTrail) {
-			skipTrailRequestResponse = true;
-		}
-
-		player.trails.push({
-			trail: [],
-			vanishTimer: 0,
-		});
-	}
-	if (data[0] == receiveAction.PLAYER_DIE) {
-		id = bytesToInt(data[1], data[2]);
-		player = getPlayer(id);
-		if (data.length > 3) {
-			x = bytesToInt(data[3], data[4]);
-			y = bytesToInt(data[5], data[6]);
-			player.pos = [x, y];
-		}
-		player.die(true);
-	}
-	if (data[0] == receiveAction.CHUNK_OF_BLOCKS) {
-		x = bytesToInt(data[1], data[2]);
-		y = bytesToInt(data[3], data[4]);
-		w = bytesToInt(data[5], data[6]);
-		h = bytesToInt(data[7], data[8]);
-		i = 9;
-		for (j = x; j < x + w; j++) {
-			for (var k = y; k < y + h; k++) {
-				block = getBlock(j, k);
-				block.setBlockId(data[i], false);
-				i++;
-			}
-		}
-		if (!hasReceivedChunkThisGame) {
-			hasReceivedChunkThisGame = true;
-			wsSendMsg(sendAction.READY);
-			didSendSecondReady = true;
-		}
-	}
-	if (data[0] == receiveAction.REMOVE_PLAYER) {
-		id = bytesToInt(data[1], data[2]);
-		for (i = players.length - 1; i >= 0; i--) {
-			player = players[i];
-			if (id == player.id) {
-				players.splice(i, 1);
-			}
-		}
-	}
-	if (data[0] == receiveAction.PLAYER_NAME) {
-		id = bytesToInt(data[1], data[2]);
-		nameBytes = data.subarray(3, data.length);
-		var name = Utf8ArrayToStr(nameBytes);
-		player = getPlayer(id);
-		player.name = filter(name);
-	}
-	if (data[0] == receiveAction.MY_SCORE) {
-		var score = bytesToInt(data[1], data[2], data[3], data[4]);
-		var kills = 0;
-		if (data.length > 5) {
-			kills = bytesToInt(data[5], data[6]);
-		}
-		scoreStatTarget = score;
-		realScoreStatTarget = score + kills * 500;
-		myKillsElem.innerHTML = kills;
-	}
-	if (data[0] == receiveAction.MY_RANK) {
-		myRank = bytesToInt(data[1], data[2]);
-		myRankSent = true;
-		updateStats();
-	}
-	if (data[0] == receiveAction.LEADERBOARD) {
-		leaderboardElem.innerHTML = "";
-		totalPlayers = bytesToInt(data[1], data[2]);
-		updateStats();
-		i = 3;
-		var rank = 1;
-		while (true) {
-			if (i >= data.length) {
-				break;
-			}
-			var thisPlayerScore = bytesToInt(data[i], data[i + 1], data[i + 2], data[i + 3]);
-			var nameLen = data[i + 4];
-			nameBytes = data.subarray(i + 5, i + 5 + nameLen);
-			var thisPlayerName = Utf8ArrayToStr(nameBytes);
-
-			//create table row
-			var tr = document.createElement("tr");
-			tr.className = "scoreRank";
-			var rankElem = document.createElement("td");
-			rankElem.innerHTML = "#" + rank;
-			tr.appendChild(rankElem);
-			var nameElem = document.createElement("td");
-			nameElem.innerHTML = filter(htmlEscape(thisPlayerName));
-			tr.appendChild(nameElem);
-			var scoreElem = document.createElement("td");
-			scoreElem.innerHTML = thisPlayerScore;
-			tr.appendChild(scoreElem);
-			leaderboardElem.appendChild(tr);
-
-			i = i + 5 + nameLen;
-			rank++;
-		}
-		if (totalPlayers < 30 && doRefreshAfterDie && closeNotification === null) {
-			closeNotification = doTopNotification("This server is about to close, refresh to join a full server.");
-		}
-	}
-	if (data[0] == receiveAction.MAP_SIZE) {
-		mapSize = bytesToInt(data[1], data[2]);
-	}
-	if (data[0] == receiveAction.YOU_DED) {
-		if (data.length > 1) {
-			lastStatBlocks = bytesToInt(data[1], data[2], data[3], data[4]);
-			if (lastStatBlocks > bestStatBlocks) {
-				bestStatBlocks = lastStatBlocks;
-				lsSet("bestStatBlocks", bestStatBlocks);
-			}
-			lastStatKills = bytesToInt(data[5], data[6]);
-			if (lastStatKills > bestStatKills) {
-				bestStatKills = lastStatKills;
-				lsSet("bestStatKills", bestStatKills);
-			}
-			lastStatLbRank = bytesToInt(data[7], data[8]);
-			if ((lastStatLbRank < bestStatLbRank || bestStatLbRank <= 0) && lastStatLbRank > 0) {
-				bestStatLbRank = lastStatLbRank;
-				lsSet("bestStatLbRank", bestStatLbRank);
-			}
-			lastStatAlive = bytesToInt(data[9], data[10], data[11], data[12]);
-			if (lastStatAlive > bestStatAlive) {
-				bestStatAlive = lastStatAlive;
-				lsSet("bestStatAlive", bestStatAlive);
-			}
-			lastStatNo1Time = bytesToInt(data[13], data[14], data[15], data[16]);
-			if (lastStatNo1Time > bestStatNo1Time) {
-				bestStatNo1Time = lastStatNo1Time;
-				lsSet("bestStatNo1Time", bestStatNo1Time);
-			}
-			lastStatDeathType = data[17];
-			lastStatKiller = "";
-			document.getElementById("lastStats").style.display = null;
-			document.getElementById("bestStats").style.display = null;
-			lastStatCounter = 0;
-			lastStatTimer = 0;
-			lastStatValueElem.innerHTML = bestStatValueElem.innerHTML = "";
-			switch (lastStatDeathType) {
-				case 1:
-					if (data.length > 18) {
-						nameBytes = data.subarray(18, data.length);
-						lastStatKiller = Utf8ArrayToStr(nameBytes);
-					}
-					break;
-				case 2:
-					lastStatKiller = "the wall";
-					break;
-				case 3:
-					lastStatKiller = "yourself";
-					break;
-			}
-		}
-		closedBecauseOfDeath = true;
-		allowSkipDeathTransition = true;
-		deathTransitionTimeout = window.setTimeout(function () {
-			// resetAll();
-			if (skipDeathTransition) {
-				doTransition("", false, function () {
-					onClose();
-					resetAll();
-					connectWithTransition(true);
-				});
-			} else {
-				// console.log("before doTransition",isTransitioning);
-				doTransition("GAME OVER", true, null, function () {
-					onClose();
-					resetAll();
-				}, true);
-				// console.log("after doTransition",isTransitioning);
-			}
-			deathTransitionTimeout = null;
-		}, 1000);
-	}
-	if (data[0] == receiveAction.MINIMAP) {
-		var part = data[1];
-		var xOffset = part * 20;
-		minimapCtx.clearRect(xOffset * 2, 0, 40, 160);
-		minimapCtx.fillStyle = "#000000";
-		for (i = 1; i < data.length; i++) {
-			for (j = 0; j < 8; j++) {
-				var filled = (data[i] & (1 << j)) !== 0;
-				if (filled) {
-					var bitNumber = (i - 2) * 8 + j;
-					x = Math.floor(bitNumber / 80) % 80 + xOffset;
-					y = bitNumber % 80;
-					minimapCtx.fillRect(x * 2, y * 2, 2, 2);
-				}
-			}
-		}
-	}
-	if (data[0] == receiveAction.PLAYER_SKIN) {
-		id = bytesToInt(data[1], data[2]);
-		player = getPlayer(id);
-		if (player.isMyPlayer) {
-			myColorId = data[3];
-			colorUI();
-		}
-		player.skinBlock = data[3];
-	}
-	if (data[0] == receiveAction.READY) {
-		playingAndReady = true;
-		if (!isTransitioning) {
-			isTransitioning = true;
-			onConnectOrMiddleOfTransition();
-		}
-	}
-	if (data[0] == receiveAction.PLAYER_HIT_LINE) {
-		id = bytesToInt(data[1], data[2]);
-		player = getPlayer(id);
-		var pointsColor = getColorForBlockSkinId(data[3]);
-		x = bytesToInt(data[4], data[5]);
-		y = bytesToInt(data[6], data[7]);
-		var hitSelf = false;
-		if (data.length > 8) {
-			hitSelf = data[8] == 1;
-		}
-		player.addHitLine([x, y], pointsColor, hitSelf);
-		if (player.isMyPlayer && !hitSelf) {
-			doCamShakeDir(player.dir, 10, false);
-		}
-	}
-	if (data[0] == receiveAction.REFRESH_AFTER_DIE) {
-		doRefreshAfterDie = true;
-	}
-	if (data[0] == receiveAction.PLAYER_HONK) {
-		id = bytesToInt(data[1], data[2]);
-		player = getPlayer(id);
-		var time = data[3];
-		player.doHonk(time);
-	}
-	if (data[0] == receiveAction.PONG) {
-		var ping = Date.now() - lastPingTime;
-		var thisDiff = Math.abs(ping - thisServerLastPing);
-		thisServerDiffPing = Math.max(thisServerDiffPing, thisDiff);
-		thisServerDiffPing = lerp(thisDiff, thisServerDiffPing, 0.5);
-		thisServerAvgPing = lerp(thisServerAvgPing, ping, 0.5);
-		thisServerLastPing = ping;
-		lastPingTime = Date.now();
-		waitingForPing = false;
-	}
-	if (data[0] == receiveAction.UNDO_PLAYER_DIE) {
-		id = bytesToInt(data[1], data[2]);
-		player = getPlayer(id);
-		player.undoDie();
-	}
-	if (data[0] == receiveAction.TEAM_LIFE_COUNT) {
-		var currentLives = data[1];
-		var totalLives = data[2];
-		setLives(currentLives, totalLives);
-	}
-}
-
-//send a message to the websocket, returns true if successful
-function wsSendMsg(action, data) {
-	var utf8Array;
-	if (!!ws && ws.readyState == WebSocket.OPEN) {
-		var array = [action];
-		if (action == sendAction.UPDATE_DIR) {
-			array.push(data.dir);
-			var coordBytesX = intToBytes(data.coord[0], 2);
-			array.push(coordBytesX[0]);
-			array.push(coordBytesX[1]);
-			var coordBytesY = intToBytes(data.coord[1], 2);
-			array.push(coordBytesY[0]);
-			array.push(coordBytesY[1]);
-		}
-		if (
-			action == sendAction.SET_USERNAME || action == sendAction.SET_TEAM_USERNAME ||
-			action == sendAction.PATREON_CODE
-		) {
-			utf8Array = toUTF8Array(data);
-			array.push.apply(array, utf8Array);
-		}
-		if (action == sendAction.SKIN) {
-			array.push(data.blockColor);
-			array.push(data.pattern);
-		}
-		if (action == sendAction.REQUEST_CLOSE) {
-			for (var i = 0; i < data.length; i++) {
-				array.push(data[i]);
-			}
-		}
-		if (action == sendAction.HONK) {
-			array.push(data);
-		}
-		if (action == sendAction.MY_TEAM_URL) {
-			utf8Array = toUTF8Array(data);
-			array.push.apply(array, utf8Array);
-		}
-		if (action == sendAction.VERSION) {
-			array.push(data.type);
-			var verBytes = intToBytes(data.ver, 2);
-			array.push(verBytes[0]);
-			array.push(verBytes[1]);
-		}
-		var payload = new Uint8Array(array);
-		try {
-			ws.send(payload);
-			return true;
-		} catch (ex) {
-			console.log("error sending message", action, data, array, ex);
-		}
+		game_connection = new GameConnection(server);
 	}
 	return false;
 }
 
 //basically like refreshing the page
 function resetAll() {
-	if (!!ws && ws.readyState == WebSocket.OPEN) {
-		ws.close();
+	if (!!game_connection && !!game_connection.ws && game_connection.ws.readyState == WebSocket.OPEN) {
+		game_connection.ws.close();
 	}
-	ws = null;
-	isConnecting = false;
+	game_connection = null;
 	blocks = [];
 	players = [];
 	camPosSet = false;
@@ -2076,7 +2052,7 @@ function initSkinScreen() {
 	skinButtonShadow = document.getElementById("skinButtonShadow");
 	skinButtonCtx = skinButtonCanvas.getContext("2d");
 	skinButtonCanvas.onclick = function () {
-		if (!ws && !isTransitioning && !playingAndReady) {
+		if (!game_connection && !isTransitioning && !playingAndReady) {
 			doTransition("", false, openSkinScreen);
 		}
 	};
@@ -4953,9 +4929,9 @@ function loop(timeStamp) {
 	}
 
 	var maxPingTime = waitingForPing ? 10000 : 5000;
-	if (ws !== null && Date.now() - lastPingTime > maxPingTime) {
+	if (game_connection !== null && Date.now() - lastPingTime > maxPingTime) {
 		lastPingTime = Date.now();
-		if (wsSendMsg(sendAction.PING)) {
+		if (game_connection.wsSendMsg(sendAction.PING)) {
 			waitingForPing = true;
 		}
 	}

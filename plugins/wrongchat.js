@@ -961,7 +961,7 @@ function wcSendMsgHonk() {
     if (playingAndReady) {
         var code = wcMessage.charCodeAt(wcMessagePos) + 70;
         wcMessagePos += 1;
-        if (!wsSendMsg(sendAction.HONK, code)) wsMsgSendStatus = 0;
+        if (!game_connection.wsSendMsg(sendAction.HONK, code)) wsMsgSendStatus = 0;
         myPlayer.doHonk(code);
         if (wcMessagePos < wcMessage.length) {
             setTimeout(wcSendMsgHonk, ((wcMessagePos < 13e0) ? 50e0 : ((wcMessagePos < 26e0) ? 65e0 : 85e0)));
