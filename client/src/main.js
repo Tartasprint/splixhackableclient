@@ -444,6 +444,35 @@ const Utf8ArrayToStr = (array) => {
 	return out;
 }
 
+//stackoverflow.com/a/18729931/3625298
+const toUTF8Array = str => {
+	const utf8 = [];
+	for (let i = 0; i < str.length; i++) {
+		const charcode = str.charCodeAt(i);
+		if (charcode < 0x80) utf8.push(charcode);
+		else if (charcode < 0x800) {
+			utf8.push(0xc0 | (charcode >> 6), 0x80 | (charcode & 0x3f));
+		} else if (charcode < 0xd800 || charcode >= 0xe000) {
+			utf8.push(0xe0 | (charcode >> 12), 0x80 | ((charcode >> 6) & 0x3f), 0x80 | (charcode & 0x3f));
+		} // surrogate pair
+		else {
+			i++;
+			// UTF-16 encodes 0x10000-0x10FFFF by
+			// subtracting 0x10000 and splitting the
+			// 20 bits of 0x0-0xFFFFF into two halves
+			charcode = 0x10000 + (((charcode & 0x3ff) << 10) |
+				(str.charCodeAt(i) & 0x3ff));
+			utf8.push(
+				0xf0 | (charcode >> 18),
+				0x80 | ((charcode >> 12) & 0x3f),
+				0x80 | ((charcode >> 6) & 0x3f),
+				0x80 | (charcode & 0x3f),
+			);
+		}
+	}
+	return utf8;
+}
+
 /** Convert bytes to integers (numbers).
  * @param {...number} bytes
  * @returns {number}
@@ -1344,7 +1373,35 @@ class SplixCanvas extends SplixBaseCanvas {
 }
 
 class MinimapCanvas {
+	/**@type {HTMLCanvasElement} */
 	canvas;
+	ctx;
+	constructor(){
+		this.canvas = document.getElementById("minimapCanvas");
+		this.ctx = this.canvas.getContext("2d");
+	}
+
+	update(data){
+		const part = data[1];
+		const xOffset = part * 20;
+		this.ctx.clearRect(xOffset * 2, 0, 40, 160);
+		this.ctx.fillStyle = "#000000";
+		for (let i = 1; i < data.length; i++) {
+			for (let j = 0; j < 8; j++) {
+				const filled = (data[i] & (1 << j)) !== 0;
+				if (filled) {
+					const bitNumber = (i - 2) * 8 + j;
+					const x = Math.floor(bitNumber / 80) % 80 + xOffset;
+					const y = bitNumber % 80;
+					this.ctx.fillRect(x * 2, y * 2, 2, 2);
+				}
+			}
+		}
+	}
+
+	reset(){
+		this.ctx.clearRect(0, 0, 160, 160);
+	}
 
 }
 
@@ -1762,8 +1819,10 @@ var myPos = null,
 var lastClientsideMoves = [],
 	isRequestingMyTrail = false,
 	skipTrailRequestResponse = false;
-var mapSize = 2000, closedBecauseOfDeath = false, minimapCtx, beginScreenVisible = true, wsOnOpenTime;
+var mapSize = 2000, closedBecauseOfDeath = false, beginScreenVisible = true, wsOnOpenTime;
 var minimapCanvas;
+/**@type {MinimapCanvas} */
+let minimap_canvas;
 var canvasQuality = 1,
 	currentDtCap = 0,
 	totalDeltaTimeFromCap = 0,
@@ -2616,8 +2675,7 @@ window.addEventListener('load', function () {
 
 	mainCanvas = document.getElementById("mainCanvas");
 	ctx = mainCanvas.getContext("2d");
-	minimapCanvas = document.getElementById("minimapCanvas");
-	minimapCtx = minimapCanvas.getContext("2d");
+	minimap_canvas = new MinimapCanvas();
 	linesCanvas = document.createElement("canvas");
 	linesCtx = linesCanvas.getContext("2d");
 	tempCanvas = document.createElement("canvas");
@@ -3417,21 +3475,7 @@ class GameConnection {
 			}, 1000);
 		}
 		if (data[0] == receiveAction.MINIMAP) {
-			var part = data[1];
-			var xOffset = part * 20;
-			minimapCtx.clearRect(xOffset * 2, 0, 40, 160);
-			minimapCtx.fillStyle = "#000000";
-			for (i = 1; i < data.length; i++) {
-				for (j = 0; j < 8; j++) {
-					var filled = (data[i] & (1 << j)) !== 0;
-					if (filled) {
-						var bitNumber = (i - 2) * 8 + j;
-						x = Math.floor(bitNumber / 80) % 80 + xOffset;
-						y = bitNumber % 80;
-						minimapCtx.fillRect(x * 2, y * 2, 2, 2);
-					}
-				}
-			}
+			minimap_canvas.update(data);
 		}
 		if (data[0] == receiveAction.PLAYER_SKIN) {
 			id = bytesToInt(data[1], data[2]);
@@ -3540,7 +3584,7 @@ function resetAll() {
 	title_canvas.resetNextFrame = true;
 	allowSkipDeathTransition = false;
 	skipDeathTransition = false;
-	minimapCtx.clearRect(0, 0, 160, 160);
+	minimap_canvas.reset();
 	hasReceivedChunkThisGame = false;
 	didSendSecondReady = false;
 	showBeginHideMainCanvas();
@@ -5463,6 +5507,8 @@ function setLeaderboardVisibility() {
 	leaderboardDivElem.style.display = leaderboardHidden ? "none" : null;
 }
 
+
+//#region Main loop
 function loop(timeStamp) {
 	var i, lastTrail, t, t2;
 	var realDeltaTime = timeStamp - prevTimeStamp;
@@ -6063,6 +6109,7 @@ function loop(timeStamp) {
 
 	window.requestAnimationFrame(loop);
 }
+//#endregion
 
 var gamePadIsHonking = false;
 var customMappings = [
@@ -6277,37 +6324,8 @@ function parseGamepads() {
 	}
 }
 
-//stackoverflow.com/a/18729931/3625298
-function toUTF8Array(str) {
-	var utf8 = [];
-	for (var i = 0; i < str.length; i++) {
-		var charcode = str.charCodeAt(i);
-		if (charcode < 0x80) utf8.push(charcode);
-		else if (charcode < 0x800) {
-			utf8.push(0xc0 | (charcode >> 6), 0x80 | (charcode & 0x3f));
-		} else if (charcode < 0xd800 || charcode >= 0xe000) {
-			utf8.push(0xe0 | (charcode >> 12), 0x80 | ((charcode >> 6) & 0x3f), 0x80 | (charcode & 0x3f));
-		} // surrogate pair
-		else {
-			i++;
-			// UTF-16 encodes 0x10000-0x10FFFF by
-			// subtracting 0x10000 and splitting the
-			// 20 bits of 0x0-0xFFFFF into two halves
-			charcode = 0x10000 + (((charcode & 0x3ff) << 10) |
-				(str.charCodeAt(i) & 0x3ff));
-			utf8.push(
-				0xf0 | (charcode >> 18),
-				0x80 | ((charcode >> 12) & 0x3f),
-				0x80 | ((charcode >> 6) & 0x3f),
-				0x80 | (charcode & 0x3f),
-			);
-		}
-	}
-	return utf8;
-}
-
 //http://stackoverflow.com/a/7124052/3625298
-function htmlEscape(str) {
+const htmlEscape = str => {
 	return String(str)
 		.replace(/&/g, "&amp;")
 		.replace(/"/g, "&quot;")
@@ -6316,21 +6334,18 @@ function htmlEscape(str) {
 		.replace(/>/g, "&gt;");
 }
 
-var swearArr = [];
-simpleRequest("./static/swearList.txt", function (result) {
-	swearArr = result.split("\n").filter(function (n) {
-		return n;
-	});
+let swearArr = [];
+simpleRequest("./static/swearList.txt", result => {
+	swearArr = result.split("\n").filter(n => n);
 });
-var swearRepl = "balaboo";
+const swearRepl = "balaboo";
 function filter(str) {
 	str = str.replace(/[卐卍]/g, "❤");
-	var words = str.split(" ");
-	for (var i = 0; i < words.length; i++) {
-		var word = words[i];
-		var wasAllUpper = word.toUpperCase() == word;
-		for (var j = 0; j < swearArr.length; j++) {
-			var swear = swearArr[j];
+	const words = str.split(" ");
+	for (let i = 0; i < words.length; i++) {
+		let word = words[i];
+		const wasAllUpper = word.toUpperCase() == word;
+		for (const swear of swearArr) {
 			if (word.toLowerCase().indexOf(swear) >= 0) {
 				if (word.length < swear.length + 2) {
 					word = swearRepl;
