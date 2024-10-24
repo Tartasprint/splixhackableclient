@@ -1,3 +1,4 @@
+"use strict";
 //#region constants
 const GLOBAL_SPEED = 0.006;
 const VIEWPORT_RADIUS = 30;
@@ -251,9 +252,282 @@ const canvasTransformTypes = Object.freeze({
 
 //#endregion constants
 
+
+
+
+
+
+
+
+
+//#region utils
+/** easing functions */ 
+const ease = {
+	in: t => t * t * t * t,
+	out: t =>  1 - Math.pow(1 - t, 4),
+	inout: t => t < 0.5 ?
+		8 * t * t * t * t
+		:
+		1 - 8 * Math.pow(-1 * t + 1, 4),
+};
+
+/* Basic lerp.
+ * @param {number} a
+ * @param {number} b
+ * @param {number} t */
+const lerp = (a, b, t) => {
+	return a + t * (b - a);
+}
+
+/** inverse lerp
+ * @param {number} a
+ * @param {number} b
+ * @param {number} t */
+const iLerp = (a, b, t) => {
+	return (t - a) / (b - a);
+}
+
+/** fixed lerp, calls lerp() multiple times when having a lower framerate
+ * 
+ * @param {number} a
+ * @param {number} b
+ * @param {number} t */
+const lerpt = (a, b, t) => {
+	return lerptt(a, b, t, deltaTime / 16.6666);
+}
+
+/** lerps between a and b over t, where tt is the amount of times that lerp 
+ * should be called
+ * 
+ * @param {number} a
+ * @param {number} b
+ * @param {number} t
+ * @param {number} tt */
+const lerptt = (a, b, t, tt) => {
+	const newT = 1 - Math.pow(1 - t, tt);
+	return lerp(a, b, newT);
+}
+
+/** lerps an array
+ * @param {number[]} a
+ * @param {number[]} b
+ * @param {number} t 
+*/
+const lerpA = (a, b, t) => {
+	const newArray = [];
+	for (let i = 0; i < a.length; i++) {
+		newArray.push(lerp(a[i], b[i], t));
+	}
+	return newArray;
+}
+
+/** fixed modulo
+ * @param {number} n
+ * @param {number} m
+ * @returns {number} r such that 0<=r<m and n=qm+r for some q*/
+const mod = (n, m) => {
+	return ((n % m) + m) % m;
+}
+
+/** clamp
+ * @param {number} v
+ * @param {number} min 
+ * @param {number} max
+*/
+const clamp = (v, min, max) => {
+	return Math.max(min, Math.min(max, v));
+}
+
+/** clamp in the [0;1] interval.
+ * @param {number} v */
+const clamp01 = (v) => {
+	return clamp(v, 0, 1);
+}
+
+/** returns random item from array
+ * @template {Item}
+ * @param {Item[]}
+ * @return {Item} */
+const randFromArray = (array) => {
+	return array[Math.floor(Math.random() * array.length)];
+}
+
+/** limits a value between -1 and 1 without clamping,
+ * smoothLimit(v) will gradually move towards 1/-1 as v goes away from zero
+ * but will never actually reach it
+ * @param {number} v
+ * @returns {number} the smoothed value */
+const smoothLimit = (v) => {
+	const negative = v < 0;
+	if (negative) {
+		v *= -1;
+	}
+	v = 1 - Math.pow(2, -v);
+	if (negative) {
+		v *= -1;
+	}
+	return v;
+}
+
+/** orders two positions so that pos1 is in the top left and pos2 in the bottom right
+ * @param {Vec2} pos1
+ * @param {Vec2} pos2
+ * @returns {[Vec2,Vec2]}
+ */
+const orderTwoPos = (pos1, pos2) => {
+	var x1 = Math.min(pos1[0], pos2[0]);
+	var y1 = Math.min(pos1[1], pos2[1]);
+	var x2 = Math.max(pos1[0], pos2[0]);
+	var y2 = Math.max(pos1[1], pos2[1]);
+	return [[x1, y1], [x2, y2]];
+}
+
+/** random number between 0 and 1 using a seed
+ * @param {number} seed
+ * @returns {number}
+ */
+const rndSeed = seed => {
+	var x = Math.sin(seed) * 10000;
+	return x - Math.floor(x);
+}
+
+
+//stackoverflow.com/a/22373135/3625298
+// http://www.onicos.com/staff/iz/amuse/javascript/expert/utf.txt
+/* utf.js - UTF-8 <=> UTF-16 convertion
+ *
+ * Copyright (C) 1999 Masanao Izumo <iz@onicos.co.jp>
+ * Version: 1.0
+ * LastModified: Dec 25 1999
+ * This library is free.  You can redistribute it and/or modify it.
+ */
+
+const Utf8ArrayToStr = (array) => {
+	let out, i, len, c;
+	let char2, char3;
+
+	out = "";
+	len = array.length;
+	i = 0;
+	while (i < len) {
+		c = array[i++];
+		switch (c >> 4) {
+			case 0:
+			case 1:
+			case 2:
+			case 3:
+			case 4:
+			case 5:
+			case 6:
+			case 7:
+				// 0xxxxxxx
+				out += String.fromCharCode(c);
+				break;
+			case 12:
+			case 13:
+				// 110x xxxx   10xx xxxx
+				char2 = array[i++];
+				out += String.fromCharCode(((c & 0x1F) << 6) | (char2 & 0x3F));
+				break;
+			case 14:
+				// 1110 xxxx  10xx xxxx  10xx xxxx
+				char2 = array[i++];
+				char3 = array[i++];
+				out += String.fromCharCode(
+					((c & 0x0F) << 12) |
+						((char2 & 0x3F) << 6) |
+						((char3 & 0x3F) << 0),
+				);
+				break;
+		}
+	}
+	return out;
+}
+
+/** Convert bytes to integers (numbers).
+ * @param {...number} bytes
+ * @returns {number}
+ */
+const bytesToInt = (...bytes) => {
+	let integer = 0;
+	let multiplier = 0;
+	for (let i = bytes.length - 1; i >= 0; i--) {
+		let thisArg = bytes[i];
+		integer = (integer | (((thisArg & 0xff) << multiplier) >>> 0)) >>> 0;
+		multiplier += 8;
+	}
+	return integer;
+}
+
+/**
+ * Converts an integer into a binary representation with `byteCount` bytes.
+ * @param {number} integer 
+ * @param {number} byteCount 
+ * @returns {number}
+ */
+const intToBytes = (integer, byteCount) => {
+	const bytes = [];
+	for (let i = 0; i < byteCount; i++) {
+		const byte = integer & 0xff;
+		bytes[byteCount - i - 1] = byte;
+		integer = (integer - byte) / 256;
+	}
+	return bytes;
+}
+
+/**
+ * Prints a UNIX time stamp in hh:mm:ss.
+ * @param {number} seconds
+ * @returns {string}
+ */
+const parseTimeToString = seconds => {
+	const hours = Math.floor(seconds / 3600);
+	const minutes = Math.floor((seconds - (hours * 3600)) / 60);
+	seconds = seconds - (hours * 3600) - (minutes * 60);
+	if (hours <= 0) {
+		const secondsS = seconds == 1 ? "" : "s";
+		if (minutes <= 0) {
+			return seconds + " second" + secondsS;
+		} else {
+			const minutesS = minutes == 1 ? "" : "s";
+			return minutes + " minute" + minutesS + " and " + seconds + " second" + secondsS;
+		}
+	} else {
+		if (hours < 10) hours = "0" + hours;
+		if (minutes < 10) minutes = "0" + minutes;
+		if (seconds < 10) seconds = "0" + seconds;
+		return hours + ":" + minutes + ":" + seconds;
+	}
+}
+
+/**
+ * Parse query in URL
+ * @param {string} url
+ * @returns {Record<string,string>}
+ */
+const parseQuery = url => {
+	const startIndex = url.indexOf("?");
+	if (startIndex < 0) {
+		return {};
+	}
+	const queryString = url.substr(startIndex + 1);
+	const queryItems = queryString.split("&");
+	let query = {};
+	for (const item of queryItems) {
+		const split = item.split("=");
+		if (split.length == 2) {
+			query[split[0]] = split[1];
+		}
+	}
+	return query;
+}
+
+//#endregion
+
+
 //stackoverflow.com/a/15666143/3625298
-var MAX_PIXEL_RATIO = (function () {
-	var ctx = document.createElement("canvas").getContext("2d"),
+const MAX_PIXEL_RATIO = (function () {
+	const ctx = document.createElement("canvas").getContext("2d"),
 		dpr = window.devicePixelRatio || 1,
 		bsr = ctx.webkitBackingStorePixelRatio ||
 			ctx.mozBackingStorePixelRatio ||
@@ -264,7 +538,7 @@ var MAX_PIXEL_RATIO = (function () {
 	return dpr / bsr;
 })();
 
-var deviceType = (function () {
+const deviceType = (function () {
 	if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) {
 		return DeviceTypes.IOS;
 	}
@@ -389,22 +663,125 @@ class Stats {
  * }} DrawCall
  */
 
+class SplixBaseCanvas {
+	/**@type {HTMLCanvasElement} */
+	canvas;
+	/**@type {CanvasRenderingContext2D} */
+	ctx;
+	/**@type {canvasTransformTypes} */ // TODO: this should be removed in the end
+	canvasTransformType;
+	constructor(){}
+
+	/**
+	 * sets the with/height of a full screen canvas, takes retina displays into account
+	 * @param {boolean} [dontUseQuality]
+	 */
+	setCanvasSize(dontUseQuality) {
+		const quality = dontUseQuality ? 1 : canvasQuality;
+		const w = this.w, h = this.h;
+		// PIXEL_RATIO = 1;
+		this.canvas.width = w * MAX_PIXEL_RATIO * quality;
+		this.canvas.height = h * MAX_PIXEL_RATIO * quality;
+		this.canvas.style.width = w * this.styleRatio + "px";
+		this.canvas.style.height = h * this.styleRatio + "px";
+	}
+
+	get w(){
+		let w = window.innerWidth;
+		if (this.canvasTransformType == canvasTransformTypes.TUTORIAL) {
+			w = 300;
+		}
+		else if (this.canvasTransformType == canvasTransformTypes.SKIN_BUTTON) {
+			w = 30;
+		}
+		else if (this.canvasTransformType == canvasTransformTypes.LIFE) {
+			w = 60;
+		}
+
+		return w;
+	}
+
+	get h(){
+		let h = window.innerHeight;
+		if (this.canvasTransformType == canvasTransformTypes.TUTORIAL) {
+			h = 300;
+		}
+		else if (this.canvasTransformType == canvasTransformTypes.SKIN_BUTTON) {
+			h = 30;
+		}
+		else if (this.canvasTransformType == canvasTransformTypes.LIFE) {
+			h = 60;
+		}
+		return h;
+	}
+
+	get styleRatio(){
+		return 1;
+	}
+
+	/**
+	 * 
+	 * @param {boolean} setSize if true sets the size of the canvas
+	 * @param {boolean} dontUseQuality
+	 */
+	ctxApplyCamTransform(setSize, dontUseQuality) {
+		if (setSize) {
+			ctxCanvasSize(this.ctx, dontUseQuality);
+		}
+		this.ctx.save();
+		if (this.canvasTransformType != canvasTransformTypes.MAIN && this.canvasTransformType != canvasTransformTypes.SKIN) {
+			const quality = dontUseQuality ? 1 : canvasQuality;
+			this.ctx.setTransform(MAX_PIXEL_RATIO * quality, 0, 0, MAX_PIXEL_RATIO * quality, 0, 0);
+		}
+		if (this.canvasTransformType == canvasTransformTypes.MAIN || this.canvasTransformType == canvasTransformTypes.SKIN) {
+			const isMain = this.canvasTransformType == canvasTransformTypes.MAIN;
+			this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
+			const biggest = Math.max(this.canvas.width, this.canvas.height);
+			const zoomEdge = biggest / MAX_ZOOM;
+			const pixelsAvailable = this.canvas.width * this.canvas.height;
+			const pixelsPerBlock = pixelsAvailable / BLOCKS_ON_SCREEN;
+			const zoomBlocks = Math.sqrt(pixelsPerBlock) / 10;
+			zoom = Math.max(zoomBlocks, zoomEdge);
+			if (isMain) {
+				this.ctx.rotate(camRotOffset);
+			}
+			this.ctx.scale(zoom, zoom);
+			if (isMain) {
+				this.ctx.translate(-camPosPrevFrame[0] * 10 - camPosOffset[0], -camPosPrevFrame[1] * 10 - camPosOffset[1]);
+			} else {
+				this.ctx.translate(-VIEWPORT_RADIUS * 10, -VIEWPORT_RADIUS * 10);
+			}
+		} else if (
+			this.canvasTransformType == canvasTransformTypes.TUTORIAL || this.canvasTransformType == canvasTransformTypes.SKIN_BUTTON
+		) {
+			this.ctx.scale(3, 3);
+		}
+	}
+}
+
 /**
  * @typedef {[number, number]} Vec2
  */
 
-class SplixCanvas {
+class SplixCanvas extends SplixBaseCanvas {
+	/**@type {HTMLCanvasElement} */
 	canvas;
-	quality = 1;
+	/**@type {CanvasRenderingContext2D} */
 	ctx;
+	/**@type {canvasTransformTypes} */ // TODO: this should be removed in the end
+	canvasTransformType;
+	/**@type {CanvasRenderingContext2D} */
+	tempCtx;
+	/**@type {CanvasRenderingContext2D} */
+	linesCtx;
 	camPos = 0;
 	camPosSet = false;
 	camPosPrevFrame = [0,0];
 	myNameAlphaTimer = 0;
-	missedFrames = [];
-	gainedFrames = [];
-	canvasTransformType = canvasTransformTypes.MAIN
 	constructor(){
+		super();
+		this.linesCtx = document.createElement('canvas').getContext('2d'); // TODO If possible, remove these contexts
+		this.tempCtx = document.createElement('canvas').getContext('2d'); // TODO use OffscreenCanvas if possible
 
 	}
 
@@ -438,32 +815,529 @@ class SplixCanvas {
 	}
 
 	/**
-	 * draws diagonal lines on a canvas, can be used as mask and stuff like that
-	 * @param {CanvasRenderingContext2D} ctx 
-	 * @param {string | CanvasGradient | CanvasPattern} color 
-	 * @param {number} thickness
-	 * @param {number} spaceBetween 
-	 * @param {number} offset
+	 * Render the main canvas.
+	 * @param {number} deltaTime 
 	 */
-	drawDiagonalLines(ctx, color, thickness, spaceBetween, offset) {
-		if (thickness > 0) {
-			ctx.lineCap = "butt";
-			ctx.strokeStyle = color;
-			ctx.lineWidth = thickness;
-			const minSize = VIEWPORT_RADIUS * 20;
-			var xOffset = 0;
-			var yOffset = 0;
-			if (this.camPosPrevFrame !== null && this.canvasTransformType == canvasTransformTypes.MAIN) {
-				xOffset = Math.round((camPosPrevFrame[0] * 10 - minSize / 2) / spaceBetween) * spaceBetween;
-				yOffset = Math.round((camPosPrevFrame[1] * 10 - minSize / 2) / spaceBetween) * spaceBetween;
+	render(deltaTime){
+		const ctx = this.ctx;
+		this.setCanvasSize();
+		if (!uglyMode) {
+			ctxCanvasSize(linesCtx);
+		}
+
+		//BG
+		ctx.fillStyle = colors.grey.BG;
+		ctx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
+		if (!uglyMode) {
+			linesCtx.fillStyle = "white";
+			linesCtx.fillRect(0, 0, linesCanvas.width, linesCanvas.height);
+		}
+
+		//cam transforms
+		camPosPrevFrame = [camPos[0], camPos[1]];
+		calcCamOffset();
+		ctxApplyCamTransform(ctx);
+		if (!uglyMode) {
+			ctxApplyCamTransform(linesCtx);
+		}
+
+		//draw blocks
+		drawBlocks(ctx, blocks, true);
+
+		//players
+		let offset = deltaTime * GLOBAL_SPEED;
+		for (const player of players) {
+			//move player
+			if (!player.isDead || !player.deathWasCertain) {
+				if (player.moveRelativeToServerPosNextFrame) {
+					offset = (Date.now() - player.lastServerPosSentTime) * GLOBAL_SPEED;
+				}
+				if (player.isMyPlayer) {
+					movePos(player.serverPos, player.serverDir, offset);
+					if (player.serverDir == player.dir) {
+						let clientServerDist = 0;
+						if (localStorage.dontSlowPlayersDown != "true") {
+							if (player.dir === 0 || player.dir == 2) { //left or right
+								if (player.pos.y == player.serverPos.y) {
+									if (player.dir === 0) { //right
+										clientServerDist = player.pos[0] - player.serverPos[0];
+									} else { //left
+										clientServerDist = player.serverPos[0] - player.pos[0];
+									}
+								}
+							} else { //up or down
+								if (player.pos.x == player.serverPos.x) {
+									if (player.dir == 1) { //down
+										clientServerDist = player.pos[1] - player.serverPos[1];
+									} else { //up
+										clientServerDist = player.serverPos[1] - player.pos[1];
+									}
+								}
+							}
+						}
+						clientServerDist = Math.max(0, clientServerDist);
+						offset *= lerp(0.5, 1, iLerp(5, 0, clientServerDist));
+					}
+				}
+				movePos(player.pos, player.dir, offset);
 			}
-			xOffset += offset % spaceBetween;
-			for (var i = -minSize; i < minSize; i += spaceBetween) {
-				var thisXOffset = xOffset + i;
+			player.moveRelativeToServerPosNextFrame = false;
+
+			player.moveDrawPosToPos();
+
+			//test if player should be dead
+			let playerShouldBeDead = false;
+			if (
+				player.drawPos[0] <= 0 || player.drawPos[1] <= 0 || player.drawPos[0] >= mapSize - 1 ||
+				player.drawPos[1] >= mapSize - 1
+			) {
+				playerShouldBeDead = true;
+			} else if (player.trails.length > 0) {
+				const lastTrail = player.trails[player.trails.length - 1].trail;
+				const roundedPos = [Math.round(player.drawPos[0]), Math.round(player.drawPos[1])];
+				if (
+					Math.abs(roundedPos[0] - player.drawPos[0]) < 0.2 &&
+					Math.abs(roundedPos[1] - player.drawPos[1]) < 0.2
+				) {
+					//only die if player.pos is close to the center of a block
+					const touchingPrevTrail = true;
+					for (let i = lastTrail.length - 3; i >= 0; i--) {
+						const pos1 = [Math.round(lastTrail[i][0]), Math.round(lastTrail[i][1])];
+						const pos2 = [Math.round(lastTrail[i + 1][0]), Math.round(lastTrail[i + 1][1])];
+						const twoPos = orderTwoPos(pos1, pos2);
+						if (
+							roundedPos[0] >= twoPos[0][0] &&
+							roundedPos[0] <= twoPos[1][0] &&
+							roundedPos[1] >= twoPos[0][1] &&
+							roundedPos[1] <= twoPos[1][1]
+						) {
+							if (!touchingPrevTrail) {
+								playerShouldBeDead = true;
+							}
+							touchingPrevTrail = true;
+						} else {
+							touchingPrevTrail = false;
+						}
+					}
+				}
+			}
+			if (playerShouldBeDead) {
+				if (!player.isDead) {
+					player.die();
+				}
+			} else {
+				player.didUncertainDeathLastTick = false;
+			}
+
+			//test if player shouldn't be dead after all
+			if (player.isDead && !player.deathWasCertain && player.isDeadTimer > 1.5) {
+				player.isDead = false;
+				if (player.trails.length > 0) {
+					const lastTrail = player.trails[player.trails.length - 1];
+					lastTrail.vanishTimer = 0;
+				}
+			}
+
+			//if my player
+			if (player.isMyPlayer) {
+				myPos = [player.pos[0], player.pos[1]];
+				miniMapPlayer.style.left = (myPos[0] / mapSize * 160 + 1.5) + "px";
+				miniMapPlayer.style.top = (myPos[1] / mapSize * 160 + 1.5) + "px";
+				if (camPosSet) {
+					camPos[0] = lerpt(camPos[0], player.pos[0], 0.03);
+					camPos[1] = lerpt(camPos[1], player.pos[1], 0.03);
+				} else {
+					camPos = [player.pos[0], player.pos[1]];
+					camPosSet = true;
+				}
+
+				if (myNextDir != player.dir) {
+					// console.log("myNextDir != player.dir (",myNextDir,"!=",player.dir,")");
+					var horizontal = player.dir === 0 || player.dir == 2;
+					//only change when currently traveling horizontally and new dir is not horizontal
+					//or when new dir is horizontal but not currently traveling horizontally
+					if (changeDirAtIsHorizontal != horizontal) {
+						var changeDirNow = false;
+						var currentCoord = player.pos[horizontal ? 0 : 1];
+						if (player.dir === 0 || player.dir == 1) { //right & down
+							if (changeDirAt < currentCoord) {
+								changeDirNow = true;
+							}
+						} else {
+							if (changeDirAt > currentCoord) {
+								changeDirNow = true;
+							}
+						}
+						if (changeDirNow) {
+							const newPos = [player.pos[0], player.pos[1]];
+							const tooFarTraveled = Math.abs(changeDirAt - currentCoord);
+							newPos[horizontal ? 0 : 1] = changeDirAt;
+							changeMyDir(myNextDir, newPos);
+							movePos(player.pos, player.dir, tooFarTraveled);
+						}
+					}
+				}
+			}
+
+			drawPlayer(ctx, player, timeStamp);
+		}
+
+		//change dir queue
+		if (sendDirQueue.length > 0) {
+			var thisDir = sendDirQueue[0];
+			if (
+				Date.now() - thisDir.addTime > 1.2 / GLOBAL_SPEED || // older than '1.2 blocks travel time'
+				sendDir(thisDir.dir, true) // senddir call was successful
+			) {
+				sendDirQueue.shift(); //remove item
+			}
+		}
+
+		if (!uglyMode) {
+			drawDiagonalLines(linesCtx, "white", 5, 10, timeStamp * 0.008);
+		}
+
+		//restore cam transforms
+		ctx.restore();
+
+		if (!uglyMode) {
+			linesCtx.restore();
+			ctx.globalCompositeOperation = "multiply";
+			// ctx.clearRect(0,0,mainCanvas.width, mainCanvas.height)
+			ctx.drawImage(linesCanvas, 0, 0);
+			ctx.globalCompositeOperation = "source-over";
+		}
+	}
+
+	//draws a player on ctx
+	drawPlayer(player, timeStamp) {
+		const ctx = this.ctx;
+		if (player.hasReceivedPosition) {
+			/** @type {number} */
+			let x, y;
+
+			/** player color */
+			const pc = getColorForBlockSkinId(player.skinBlock); //player color
+
+			//draw trail
+			if (player.trails.length > 0) {
+				//iterate over each trail
+				for (let trailI = player.trails.length - 1; trailI >= 0; trailI--) {
+					const trail = player.trails[trailI];
+
+					//increase vanish timer
+					const last = trailI == player.trails.length - 1;
+					if (!last || player.isDead) {
+						if (uglyMode) {
+							trail.vanishTimer = 10;
+						} else {
+							let speed = (player.isDead && last) ? 0.006 : 0.02;
+							trail.vanishTimer += deltaTime * speed;
+						}
+						if (!last && (trail.vanishTimer > 10)) {
+							player.trails.splice(trailI, 1);
+						}
+					}
+
+					//if there's no trail, don't draw anything
+					if (trail.trail.length > 0) {
+						const lastPos = last ? player.drawPos : null;
+						if (trail.vanishTimer > 0 && !uglyMode) {
+							ctxApplyCamTransform(tempCtx, true);
+							drawTrailOnCtx(
+								[{
+									ctx: tempCtx,
+									color: pc.darker,
+									offset: 5,
+								}, {
+									ctx: tempCtx,
+									color: pc.brighter,
+									offset: 4,
+								}],
+								trail.trail,
+								lastPos,
+							);
+
+							tempCtx.globalCompositeOperation = "destination-out";
+							drawDiagonalLines(tempCtx, "white", trail.vanishTimer, 10, timeStamp * 0.003);
+
+							ctx.restore();
+							tempCtx.restore();
+							linesCtx.restore();
+
+							ctx.drawImage(tempCanvas, 0, 0);
+							tempCtx.fillStyle = colors.grey.diagonalLines;
+							tempCtx.globalCompositeOperation = "source-in";
+							tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+							linesCtx.drawImage(tempCanvas, 0, 0);
+							ctxApplyCamTransform(ctx);
+							ctxApplyCamTransform(linesCtx);
+						} else if (trail.vanishTimer < 10) {
+							if (uglyMode) {
+								drawTrailOnCtx(
+									[{
+										ctx: ctx,
+										color: pc.darker,
+										offset: 5,
+									}, {
+										ctx: ctx,
+										color: pc.brighter,
+										offset: 4,
+									}],
+									trail.trail,
+									lastPos,
+								);
+							} else {
+								drawTrailOnCtx(
+									[{
+										ctx: ctx,
+										color: pc.darker,
+										offset: 5,
+									}, {
+										ctx: ctx,
+										color: pc.brighter,
+										offset: 4,
+									}, {
+										ctx: linesCtx,
+										color: colors.grey.diagonalLines,
+										offset: 4,
+									}],
+									trail.trail,
+									lastPos,
+								);
+							}
+						}
+					}
+				}
+			}
+
+			//draw player
+			var dp = [player.drawPos[0] * 10 + 4.5, player.drawPos[1] * 10 + 4.5]; //draw position
+			var pr = 6; //player radius
+			var so = 0.3; //shadow offset
+			var gradient = ctx.createRadialGradient(dp[0] - 3, dp[1] - 3, 0, dp[0], dp[1], pr);
+			gradient.addColorStop(0, pc.slightlyBrighter);
+			gradient.addColorStop(1, pc.brighter);
+			linesCtx.fillStyle = "white";
+			if (player.isDead) {
+				player.isDeadTimer += deltaTime * 0.003;
+				ctx.fillStyle = gradient;
+
+				for (var i = 0; i < player.deadAnimParts.length - 1; i++) {
+					var arcStart = player.deadAnimParts[i];
+					var arcEnd = player.deadAnimParts[i + 1];
+					var arcAvg = lerp(arcStart, arcEnd, 0.5);
+					var dir = player.dir * Math.PI / 2 - Math.PI;
+					var distanceModifier = Math.min(
+						Math.abs(dir - arcAvg),
+						Math.abs((dir - Math.PI * 2) - arcAvg),
+						Math.abs((dir + Math.PI * 2) - arcAvg),
+					);
+					var rand = player.deadAnimPartsRandDist[i];
+					var distance = (1 - Math.pow(2, -2 * player.isDeadTimer)) * distanceModifier * 5 * (rand + 1);
+					var pOffset = [Math.cos(arcAvg) * distance, Math.sin(arcAvg) * distance]; //piece offset
+					ctx.globalAlpha = linesCtx.globalAlpha = Math.max(0, 1 - (player.isDeadTimer * 0.2));
+					ctx.beginPath();
+					ctx.arc(dp[0] - so + pOffset[0], dp[1] - so + pOffset[1], pr, arcStart, arcEnd, false);
+					ctx.lineTo(dp[0] - so + pOffset[0], dp[1] - so + pOffset[1]);
+					ctx.fill();
+					if (!uglyMode) {
+						linesCtx.beginPath();
+						linesCtx.arc(dp[0] - so + pOffset[0], dp[1] - so + pOffset[1], pr, arcStart, arcEnd, false);
+						linesCtx.lineTo(dp[0] - so + pOffset[0], dp[1] - so + pOffset[1]);
+						linesCtx.fill();
+					}
+				}
+				ctx.globalAlpha = linesCtx.globalAlpha = 1;
+			} else {
+				ctx.fillStyle = pc.darker;
 				ctx.beginPath();
-				ctx.moveTo(thisXOffset, yOffset);
-				ctx.lineTo(thisXOffset + minSize, yOffset + minSize);
-				ctx.stroke();
+				ctx.arc(dp[0] + so, dp[1] + so, pr, 0, 2 * Math.PI, false);
+				ctx.fill();
+				ctx.fillStyle = gradient;
+				ctx.beginPath();
+				ctx.arc(dp[0] - so, dp[1] - so, pr, 0, 2 * Math.PI, false);
+				ctx.fill();
+				if (player.isMyPlayer && localStorage.drawWhiteDot == "true") {
+					ctx.fillStyle = "white";
+					ctx.beginPath();
+					ctx.arc(dp[0] - so, dp[1] - so, 1, 0, 2 * Math.PI, false);
+					ctx.fill();
+				}
+
+				//lines canvas (remove lines)
+				if (!uglyMode) {
+					linesCtx.beginPath();
+					linesCtx.arc(dp[0] + so, dp[1] + so, pr, 0, 2 * Math.PI, false);
+					linesCtx.fill();
+					linesCtx.beginPath();
+					linesCtx.arc(dp[0] - so, dp[1] - so, pr, 0, 2 * Math.PI, false);
+					linesCtx.fill();
+				}
+			}
+			if (player.isMyPlayer && localStorage.drawActualPlayerPos == "true") {
+				ctx.fillStyle = "#FF0000";
+				ctx.beginPath();
+				ctx.arc(player.serverPos[0] * 10 + 5, player.serverPos[1] * 10 + 5, pr, 0, 2 * Math.PI, false);
+				ctx.fill();
+			}
+
+			//draw hitlines
+			if (player.hitLines.length > 0) {
+				for (var hitlineI = player.hitLines.length - 1; hitlineI >= 0; hitlineI--) {
+					var thisHit = player.hitLines[hitlineI];
+
+					//increase vanish timer
+					thisHit.vanishTimer += deltaTime * 0.004;
+					var t = thisHit.vanishTimer;
+					if (t > 4) {
+						player.hitLines.splice(hitlineI, 1);
+					}
+
+					x = thisHit.pos[0] * 10 + 5;
+					y = thisHit.pos[1] * 10 + 5;
+
+					//draw circle
+					if (t < 2) {
+						var radius1 = Math.max(0, ease.out(iLerp(0, 2, t)) * 18);
+						var radius2 = Math.max(0, ease.out(iLerp(0.5, 2, t)) * 18);
+						ctx.fillStyle = pc.brighter;
+						ctx.beginPath();
+						ctx.arc(x, y, radius1, 0, 2 * Math.PI, false);
+						ctx.arc(x, y, radius2, 0, 2 * Math.PI, false);
+						ctx.fill("evenodd");
+
+						if (!uglyMode) {
+							//lines canvas (remove lines)
+							linesCtx.beginPath();
+							linesCtx.arc(x, y, radius1, 0, 2 * Math.PI, false);
+							linesCtx.arc(x, y, radius2, 0, 2 * Math.PI, false);
+							linesCtx.fill("evenodd");
+						}
+					}
+
+					//draw 500+
+					if (thisHit.color !== undefined && player.isMyPlayer) {
+						ctx.save();
+						ctx.font = linesCtx.font = "6px Arial, Helvetica, sans-serif";
+						ctx.fillStyle = thisHit.color.brighter;
+						ctx.shadowColor = thisHit.color.darker;
+						ctx.shadowOffsetX = ctx.shadowOffsetY = 0.4 * MAX_PIXEL_RATIO * zoom * canvasQuality;
+						w = ctx.measureText("+500").width;
+						var hOffset;
+						var opacity;
+						if (t < 0.5) {
+							opacity = iLerp(0, 0.5, t);
+						} else if (t < 3.5) {
+							opacity = 1;
+						} else {
+							opacity = iLerp(4, 3.5, t);
+						}
+						opacity = clamp01(opacity);
+						if (t < 2) {
+							hOffset = ease.out(t / 2) * 20;
+						} else {
+							hOffset = 20;
+						}
+						ctx.globalAlpha = opacity;
+						ctx.fillText("+500", x - w / 2, y - hOffset);
+						ctx.restore();
+					}
+				}
+			}
+
+			//draw honk
+			if (player.honkTimer < player.honkMaxTime) {
+				player.honkTimer += deltaTime * 0.255;
+				ctx.fillStyle = pc.brighter;
+				ctx.globalAlpha = clamp01(iLerp(player.honkMaxTime, 0, player.honkTimer));
+				ctx.beginPath();
+				ctx.arc(
+					player.drawPos[0] * 10 + 4.5 + so,
+					player.drawPos[1] * 10 + 4.5 + so,
+					pr + player.honkTimer * 0.1,
+					0,
+					2 * Math.PI,
+					false,
+				);
+				ctx.fill();
+				ctx.globalAlpha = 1;
+
+				if (!uglyMode) {
+					linesCtx.globalAlpha = clamp01(iLerp(player.honkMaxTime, 0, player.honkTimer));
+					linesCtx.beginPath();
+					linesCtx.arc(
+						player.drawPos[0] * 10 + 4.5 + so,
+						player.drawPos[1] * 10 + 4.5 + so,
+						pr + player.honkTimer * 0.1,
+						0,
+						2 * Math.PI,
+						false,
+					);
+					linesCtx.fill();
+					linesCtx.globalAlpha = 1;
+				}
+			}
+
+			//draw name
+			if (localStorage.hidePlayerNames != "true") {
+				myNameAlphaTimer += deltaTime * 0.001;
+				ctx.font = linesCtx.font = USERNAME_SIZE + "px Arial, Helvetica, sans-serif";
+				if (player.name) {
+					var deadAlpha = 1;
+					var myAlpha = 1;
+					if (player.isMyPlayer) {
+						myAlpha = 9 - myNameAlphaTimer;
+					}
+					if (player.isDead) {
+						deadAlpha = 1 - player.isDeadTimer;
+					}
+					var alpha = Math.min(deadAlpha, myAlpha);
+					if (alpha > 0) {
+						ctx.save();
+						if (!uglyMode) {
+							linesCtx.save();
+						}
+						ctx.globalAlpha = clamp01(alpha);
+						var width = ctx.measureText(player.name).width;
+						width = Math.min(100, width);
+						x = player.drawPos[0] * 10 + 5 - width / 2;
+						y = player.drawPos[1] * 10 - 5;
+
+						ctx.rect(x - 4, y - USERNAME_SIZE * 1.2, width + 8, USERNAME_SIZE * 2);
+						ctx.clip();
+						if (!uglyMode) {
+							linesCtx.rect(x - 4, y - USERNAME_SIZE * 1.2, width + 8, USERNAME_SIZE * 2);
+							linesCtx.clip();
+							linesCtx.fillText(player.name, x, y);
+						}
+
+						ctx.shadowColor = "rgba(0,0,0,0.9)";
+						ctx.shadowBlur = 10;
+						ctx.shadowOffsetX = ctx.shadowOffsetY = 2;
+						ctx.fillStyle = pc.brighter;
+						ctx.fillText(player.name, x, y);
+
+						ctx.shadowColor = pc.darker;
+						ctx.shadowBlur = 0;
+						ctx.shadowOffsetX = ctx.shadowOffsetY = 0.8;
+						ctx.fillText(player.name, x, y);
+
+						ctx.restore();
+						if (!uglyMode) {
+							linesCtx.restore();
+						}
+					}
+				}
+			}
+
+			//draw cool shades
+			if (player.name == "Jesper" && !player.isDead) {
+				ctx.fillStyle = "black";
+				ctx.fillRect(dp[0] - 6.5, dp[1] - 2, 13, 1);
+				ctx.fillRect(dp[0] - 1, dp[1] - 2, 2, 2);
+				ctx.fillRect(dp[0] - 5.5, dp[1] - 2, 5, 3);
+				ctx.fillRect(dp[0] + 0.5, dp[1] - 2, 5, 3);
 			}
 		}
 	}
@@ -475,13 +1349,17 @@ class MinimapCanvas {
 }
 
 
-class SplixLogoCanvas {
+class SplixLogoCanvas extends SplixBaseCanvas {
 	canvas;
 	ctx;
 	timer = -1;
 	resetNextFrame = true;
 	lastRender = 0;
+	canvasTransformType = canvasTransformTypes.TITLE;
+	w = 520;
+	h = 180;
 	constructor(){
+		super();
 		for (const line of titleLines) {
 			for (const subline of line.line) {
 				for (let coordI = 0; coordI < subline.length; coordI += 2) {
@@ -493,12 +1371,16 @@ class SplixLogoCanvas {
 		this.canvas= document.getElementById("logoCanvas");
 		this.ctx = this.canvas.getContext("2d");
 	}
+
+	get styleRatio(){
+		return Math.min(1, (window.innerWidth - 30) / w)
+	}
 	
 	/**
 	 * draws main title
 	 * @param {boolean} [isShadow]
 	 * @param {number} [maxExtrude]
-	 * @param {boolean} [extraShadow] 
+	 * @param {boolean} [extraShadow]
 	 */
 	drawTitle(isShadow, maxExtrude, extraShadow) {
 		this.ctx.strokeStyle = (!!isShadow) ? colors.red.patternEdge : colors.red.brighter;
@@ -516,7 +1398,7 @@ class SplixLogoCanvas {
 
 		const t = this.timer;
 		for (const line of titleLines) {
-			var lineT = clamp01(t * line.speed - line.offset);
+			const lineT = clamp01(t * line.speed - line.offset);
 			let extrude = clamp01(t) * 5;
 			if (maxExtrude !== undefined) {
 				extrude = Math.min(extrude, maxExtrude);
@@ -585,9 +1467,8 @@ class SplixLogoCanvas {
 		this.timer += (timeStamp - this.lastRender) * 0.002;
 		this.lastRender = timeStamp;
 
-		canvasTransformType = canvasTransformTypes.TITLE;
-		ctxCanvasSize(this.ctx, true);
-		ctxApplyCamTransform(this.ctx, false, true);
+		this.setCanvasSize(true);
+		this.ctxApplyCamTransform(false, true);
 
 		this.drawTitle(true, 0, true);
 		this.drawTitle(true, 2.5);
@@ -596,6 +1477,266 @@ class SplixLogoCanvas {
 	}
 }
 
+
+class TransitionCanvas extends SplixBaseCanvas {
+	/**@type {HTMLCanvasElement} */
+	canvas;
+	/**@type {CanvasRenderingContext2D} */
+	ctx;
+	/**@type {HTMLCanvasElement} */
+	tempCanvas;
+	/**@type {CanvasRenderingContext2D} */
+	tempCtx;
+	/**@type {canvasTransformTypes} */
+	canvasTransformType = canvasTransformTypes.MAIN;
+	/** @type {number} */
+	timer = 0;
+	/** @type {number} */
+	prevTimer = 0;
+	/** @type {number} */
+	direction = 1;
+	/** @type {(()=>void)?}*/
+	callback1 = null;
+	/** @type {(()=>void)?}*/
+	callback2 = null;
+	/** @type {boolean}*/
+	reverseOnHalf = false;
+	/** @type {string}*/
+	text = "GAME OVER";
+	constructor(){
+		super();
+		this.canvas = document.getElementById("transitionCanvas");
+		this.ctx = this.canvas.getContext('2d');
+		this.tempCanvas = document.createElement("canvas");
+		this.tempCtx = tempCanvas.getContext("2d");
+	}
+
+	render(){
+		let DARK_EDGE_SIZE = 10, TITLE_HEIGHT = 60, TITLE_DURATION = 2, TITLE_PADDING = 10, TEXT_EXTRUDE = 5;
+		TITLE_HEIGHT *= MAX_PIXEL_RATIO;
+		TEXT_EXTRUDE *= MAX_PIXEL_RATIO;
+		this.timer += deltaTime * this.direction * 0.001;
+
+		if (
+			this.direction == 1 && this.callback1 !== null && this.timer >= 0.5 &&
+			this.prevTimer < 0.5
+		) {
+			this.timer = 0.5;
+			this.callback1();
+		}
+
+		if (
+			this.direction == -1 && this.callback2 !== null && this.timer <= 0.5 &&
+			this.prevTimer > 0.5
+		) {
+			this.timer = 0.5;
+			this.callback2();
+		}
+
+		if (
+			this.reverseOnHalf && this.direction == 1 && this.timer >= 1 + TITLE_DURATION &&
+			this.prevTimer < 1 + TITLE_DURATION
+		) {
+			this.direction = -1;
+			this.timer = 1;
+		}
+
+		this.prevTimer = this.timer;
+		if (
+			(this.timer <= 0 && this.reverseOnHalf) ||
+			(this.timer >= TITLE_DURATION + 1.5 && !this.reverseOnHalf)
+		) {
+			this.direction = 0;
+			isTransitioning = false;
+			this.canvas.style.display = "none";
+		} else {
+			this.setCanvasSize(true);
+
+			const w = this.w, h = this.h;
+			const t = this.timer;
+			if (t < 0.5) {
+				let t2 = t * 2;
+				t2 = ease.in(t2);
+				this.ctx.fillStyle = colors.green2.darker;
+				this.ctx.fillRect(0, lerp(-DARK_EDGE_SIZE, h / 2, t2), w, DARK_EDGE_SIZE);
+				this.ctx.fillStyle = colors.green2.brighter;
+				this.ctx.fillRect(0, -DARK_EDGE_SIZE, w, lerp(0, h / 2 + DARK_EDGE_SIZE, t2));
+				this.ctx.fillRect(0, lerp(h, h / 2, t2), w, h);
+			} else if (t < 1) {
+				let t2 = t * 2 - 1;
+				t2 = ease.out(t2);
+				if (this.text) {
+					this.ctx.fillStyle = colors.green2.darker;
+					this.ctx.fillRect(
+						0,
+						lerp(0, h / 2 - TITLE_HEIGHT / 2, t2),
+						w,
+						lerp(h, TITLE_HEIGHT + DARK_EDGE_SIZE, t2),
+					);
+					this.ctx.fillStyle = colors.green2.brighter;
+					this.ctx.fillRect(0, lerp(0, h / 2 - TITLE_HEIGHT / 2, t2), w, lerp(h, TITLE_HEIGHT, t2));
+				} else {
+					this.ctx.fillStyle = colors.green2.darker;
+					this.ctx.fillRect(0, lerp(0, h / 2, t2), w, lerp(h, DARK_EDGE_SIZE, t2));
+					this.ctx.fillStyle = colors.green2.brighter;
+					this.ctx.fillRect(0, lerp(0, h / 2, t2), w, lerp(h, 0, t2));
+				}
+			} else if (t < 1 + TITLE_DURATION) {
+				if (this.text) {
+					this.ctx.fillStyle = colors.green2.darker;
+					this.ctx.fillRect(0, h / 2, w, TITLE_HEIGHT / 2 + DARK_EDGE_SIZE);
+					this.ctx.fillStyle = colors.green2.brighter;
+					this.ctx.fillRect(0, h / 2 - TITLE_HEIGHT / 2, w, TITLE_HEIGHT);
+				} else {
+					this.timer = TITLE_DURATION + 1.5;
+				}
+			} else if (t < TITLE_DURATION + 1.5) {
+				let t2 = (t - TITLE_DURATION - 1) * 2;
+				t2 = ease.in(t2);
+				this.ctx.fillStyle = colors.green2.darker;
+				this.ctx.fillRect(0, h / 2, w, lerp(TITLE_HEIGHT / 2 + DARK_EDGE_SIZE, DARK_EDGE_SIZE, t2));
+				this.ctx.fillStyle = colors.green2.brighter;
+				this.ctx.fillRect(0, lerp(h / 2 - TITLE_HEIGHT / 2, h / 2, t2), w, lerp(TITLE_HEIGHT, 0, t2));
+			}
+
+			if (t > 0.5 && t < 3.5) {
+				const fontHeight = TITLE_HEIGHT - TITLE_PADDING * 2;
+				this.ctx.font = fontHeight + "px Arial, Helvetica, sans-serif";
+				const totalWidth = this.ctx.measureText(this.text).width;
+				const x = w / 2 - totalWidth / 2 + TEXT_EXTRUDE / 2;
+				const y = h / 2 + fontHeight * 0.37 + TEXT_EXTRUDE / 2;
+				let t2;
+				if (t < 1.1) {
+					t2 = iLerp(0.5, 1.1, t);
+				} else if (t < 2.9) {
+					t2 = 1;
+				} else {
+					t2 = iLerp(3.5, 2.9, t);
+				}
+				this.drawAnimatedText(
+					t2,
+					x,
+					y,
+					fontHeight,
+					"white",
+					"Arial, Helvetica, sans-serif",
+					TEXT_EXTRUDE,
+					3,
+					16842438,
+				);
+				// this.ctx.fillStyle = "white";
+				// this.ctx.fillText(transitionText, x, y);
+			}
+
+			this.ctx.restore();
+		}
+
+		//skip death transition
+		if (skipDeathTransition && this.text == "GAME OVER" && this.time > 1) {
+			this.timer = 1.1;
+			this.direction = -1;
+			allowSkipDeathTransition = false;
+			skipDeathTransition = false;
+		}
+	}
+
+	 /** starts the transition
+	  * @param {string} text
+	  * @param {boolean} [reverseOnHalf] start playing backwords once it is showing the title
+	  * @param {(()=>void)?} [callback1] fired once the transition is full screen for the first time
+	  * @param {(()=>void)?} [callback2] fired when full screen for the second time, only shown when reverseOnHalf = true
+	  * @param {boolean} [overrideExisting] */
+	doTransition(text, reverseOnHalf, callback1, callback2, overrideExisting) {
+		// console.log("doTransition()", text, reverseOnHalf, callback1, callback2, overrideExisting);
+		// console.log("isTransitioning:",isTransitioning);
+		if (!isTransitioning || overrideExisting) {
+			this.text = text;
+			isTransitioning = true;
+			this.direction = 1;
+			this.timer = this.prevTimer = 0;
+			this.canvas.style.display = null;
+			if (reverseOnHalf === undefined) {
+				reverseOnHalf = false;
+			}
+			this.reverseOnHalf = reverseOnHalf;
+			this.callback1 = callback1;
+			this.callback2 = callback2;
+		}
+	}
+
+	/**
+	 * Draw and animate text on the transition canvas.
+	 * @param {number} time 
+	 * @param {number} x 
+	 * @param {number} y 
+	 * @param {number} fontHeight 
+	 * @param {*} color 
+	 * @param {string} font 
+	 * @param {number} textExtrude 
+	 * @param {number} charSpeed 
+	 * @param {number} orderSeed 
+	 */
+	drawAnimatedText(time, x, y, fontHeight, color, font, textExtrude, charSpeed, orderSeed) {
+		if (color === undefined) {
+			color = "white";
+		}
+		ctx.fillStyle = color;
+		if (font === undefined) {
+			font = "Arial, Helvetica, sans-serif";
+		}
+		ctx.font = font = fontHeight + "px " + font;
+		if (orderSeed === undefined) {
+			orderSeed = 0;
+		}
+		let lastWidth = 0;
+		for (let charI = 0; charI < this.text.length; charI++) {
+			const rndOffset = rndSeed(charI + orderSeed);
+			if (charSpeed === undefined) {
+				charSpeed = 3;
+			}
+			const charT = time * charSpeed - (rndOffset * (charSpeed - rndOffset));
+			const thisChar = this.text[charI];
+			const charWidth = ctx.measureText(thisChar).width;
+			const yMin = y - fontHeight * 0.77;
+			if (charT < 0.8) {
+				this.tempCanvas.width = charWidth;
+				this.tempCanvas.height = fontHeight;
+				this.tempCtx.font = font;
+				this.tempCtx.fillStyle = "white";
+				this.tempCtx.fillText(thisChar, 0, fontHeight * 0.77);
+				if (charT < 0.4) {
+					const t2 = charT / 0.4;
+	
+					this.tempCtx.beginPath();
+					this.tempCtx.moveTo(0, lerp(fontHeight, 0, t2));
+					this.tempCtx.lineTo(0, fontHeight);
+					this.tempCtx.lineTo(lerp(0, charWidth, t2), fontHeight);
+					this.tempCtx.closePath();
+				} else {
+					const t2 = charT / 0.4 - 1;
+					this.tempCtx.moveTo(0, 0);
+					this.tempCtx.lineTo(0, fontHeight);
+					this.tempCtx.lineTo(charWidth, fontHeight);
+					this.tempCtx.lineTo(charWidth, lerp(fontHeight, 0, t2));
+					this.tempCtx.lineTo(lerp(0, charWidth, t2), 0);
+				}
+				this.tempCtx.globalCompositeOperation = "destination-in";
+				this.tempCtx.fill();
+				this.ctx.drawImage(this.tempCanvas, x + lastWidth, yMin);
+			} else {
+				const t2 = Math.min(1, charT * 5 - 4);
+				const offset = t2 * textExtrude;
+				this.ctx.fillStyle = colors.green2.darker;
+				for (let i = 0; i < offset; i++) {
+					this.ctx.fillText(thisChar, x + lastWidth - offset + i, y - offset + i);
+				}
+				this.ctx.fillStyle = "white";
+				this.ctx.fillText(thisChar, x + lastWidth - offset, y - offset);
+			}
+			lastWidth += charWidth - 0.5;
+		}
+	}
+}
 
 // Some dated code is using these in places like `for(i = 0`.
 // While ideally these variables should all be made local,
@@ -606,7 +1747,11 @@ var i, w;
 const IS_SECURE = location.protocol.indexOf("https") >= 0;
 const SECURE_WS = IS_SECURE ? "wss://" : "ws://";
 
-var mainCanvas, ctx, prevTimeStamp = null, blocks = [], players = [];
+var mainCanvas,
+/** main ctx */
+ctx, prevTimeStamp = null, blocks = [],
+/** @type {Player[]} */
+players = [];
 var camPos = [0, 0], camPosSet = false, camPosPrevFrame = [0, 0], myNameAlphaTimer = 0;
 var myPos = null,
 	myPlayer = null,
@@ -646,13 +1791,9 @@ var miniMapPlayer,
 var scoreStatTarget = 25, scoreStat = 25, realScoreStatTarget = 25, realScoreStat = 25;
 var linesCanvas, linesCtx, tempCanvas, tempCtx;
 var showCouldntConnectAfterTransition = false, playingAndReady = false, canRunAds = false;
-var transitionCanvas,
-	tCtx,
-	transitionTimer = 0,
-	transitionPrevTimer = 0,
-	transitionDirection = 1,
-	transitionText = "GAME OVER";
-var isTransitioning = false, transitionCallback1 = null, transitionCallback2 = null, transitionReverseOnHalf = false;
+/** @type {TransitionCanvas} */
+let transition_canvas;
+var isTransitioning = false;
 var tutorialCanvas, tutCtx, tutorialTimer = 0, tutorialPrevTimer = 0, tutorialBlocks, tutorialPlayers, tutorialText;
 var touchControlsElem;
 var skinButtonCanvas, skinButtonCtx, skinButtonBlocks = [], skinButtonShadow;
@@ -1047,6 +2188,156 @@ class Player extends EventTarget {
 			honkSfx.play();
 		}
 	}
+	//moves (lerp) drawPos to the actual player position
+	moveDrawPosToPos(){
+		// var xDist = Math.abs(player.pos[0] - player.drawPos[0]);
+		// var yDist = Math.abs(player.pos[1] - player.drawPos[1]);
+		let target;
+		if (this.isDead && !this.deathWasCertain) {
+			target = this.uncertainDeathPosition;
+		} else {
+			target = this.pos;
+		}
+		this.drawPos[0] = lerpt(this.drawPos[0], target[0], 0.23);
+		this.drawPos[1] = lerpt(this.drawPos[1], target[1], 0.23);
+	}
+
+	/**
+	 * Update the player state.
+	 * @param {number} offset 
+	 */
+	update(offset){
+		if (!this.isDead || !this.deathWasCertain) {
+			if (this.moveRelativeToServerPosNextFrame) {
+				offset = (Date.now() - this.lastServerPosSentTime) * GLOBAL_SPEED;
+			}
+			if (this.isMyPlayer) {
+				movePos(this.serverPos, this.serverDir, offset);
+				if (this.serverDir == this.dir) {
+					let clientServerDist = 0;
+					if (localStorage.dontSlowPlayersDown != "true") {
+						if (this.dir === 0 || this.dir == 2) { //left or right
+							if (this.pos.y == this.serverPos.y) {
+								if (this.dir === 0) { //right
+									clientServerDist = this.pos[0] - this.serverPos[0];
+								} else { //left
+									clientServerDist = this.serverPos[0] - this.pos[0];
+								}
+							}
+						} else { //up or down
+							if (this.pos.x == this.serverPos.x) {
+								if (this.dir == 1) { //down
+									clientServerDist = this.pos[1] - this.serverPos[1];
+								} else { //up
+									clientServerDist = this.serverPos[1] - this.pos[1];
+								}
+							}
+						}
+					}
+					clientServerDist = Math.max(0, clientServerDist);
+					offset *= lerp(0.5, 1, iLerp(5, 0, clientServerDist));
+				}
+			}
+			movePos(this.pos, this.dir, offset);
+		}
+		this.moveRelativeToServerPosNextFrame = false;
+
+		this.moveDrawPosToPos();
+
+		//test if player should be dead
+		let playerShouldBeDead = false;
+		if (
+			this.drawPos[0] <= 0 || this.drawPos[1] <= 0 || this.drawPos[0] >= mapSize - 1 ||
+			this.drawPos[1] >= mapSize - 1
+		) {
+			playerShouldBeDead = true;
+		} else if (this.trails.length > 0) {
+			const lastTrail = this.trails[this.trails.length - 1].trail;
+			const roundedPos = [Math.round(this.drawPos[0]), Math.round(this.drawPos[1])];
+			if (
+				Math.abs(roundedPos[0] - this.drawPos[0]) < 0.2 &&
+				Math.abs(roundedPos[1] - this.drawPos[1]) < 0.2
+			) {
+				//only die if player.pos is close to the center of a block
+				const touchingPrevTrail = true;
+				for (let i = lastTrail.length - 3; i >= 0; i--) {
+					const pos1 = [Math.round(lastTrail[i][0]), Math.round(lastTrail[i][1])];
+					const pos2 = [Math.round(lastTrail[i + 1][0]), Math.round(lastTrail[i + 1][1])];
+					const twoPos = orderTwoPos(pos1, pos2);
+					if (
+						roundedPos[0] >= twoPos[0][0] &&
+						roundedPos[0] <= twoPos[1][0] &&
+						roundedPos[1] >= twoPos[0][1] &&
+						roundedPos[1] <= twoPos[1][1]
+					) {
+						if (!touchingPrevTrail) {
+							playerShouldBeDead = true;
+						}
+						touchingPrevTrail = true;
+					} else {
+						touchingPrevTrail = false;
+					}
+				}
+			}
+		}
+		if (playerShouldBeDead) {
+			if (!this.isDead) {
+				this.die();
+			}
+		} else {
+			this.didUncertainDeathLastTick = false;
+		}
+
+		//test if player shouldn't be dead after all
+		if (this.isDead && !this.deathWasCertain && this.isDeadTimer > 1.5) {
+			this.isDead = false;
+			if (this.trails.length > 0) {
+				const lastTrail = this.trails[this.trails.length - 1];
+				lastTrail.vanishTimer = 0;
+			}
+		}
+
+		//if my player
+		if (this.isMyPlayer) {
+			myPos = [this.pos[0], this.pos[1]];
+			miniMapPlayer.style.left = (myPos[0] / mapSize * 160 + 1.5) + "px";
+			miniMapPlayer.style.top = (myPos[1] / mapSize * 160 + 1.5) + "px";
+			if (camPosSet) {
+				camPos[0] = lerpt(camPos[0], this.pos[0], 0.03);
+				camPos[1] = lerpt(camPos[1], this.pos[1], 0.03);
+			} else {
+				camPos = [this.pos[0], this.pos[1]];
+				camPosSet = true;
+			}
+
+			if (myNextDir != this.dir) {
+				// console.log("myNextDir != player.dir (",myNextDir,"!=",player.dir,")");
+				var horizontal = this.dir === 0 || this.dir == 2;
+				//only change when currently traveling horizontally and new dir is not horizontal
+				//or when new dir is horizontal but not currently traveling horizontally
+				if (changeDirAtIsHorizontal != horizontal) {
+					var changeDirNow = false;
+					var currentCoord = this.pos[horizontal ? 0 : 1];
+					if (this.dir === 0 || this.dir == 1) { //right & down
+						if (changeDirAt < currentCoord) {
+							changeDirNow = true;
+						}
+					} else {
+						if (changeDirAt > currentCoord) {
+							changeDirNow = true;
+						}
+					}
+					if (changeDirNow) {
+						const newPos = [this.pos[0], this.pos[1]];
+						const tooFarTraveled = Math.abs(changeDirAt - currentCoord);
+						newPos[horizontal ? 0 : 1] = changeDirAt;
+						changeMyDir(myNextDir, newPos);
+						movePos(this.pos, this.dir, tooFarTraveled);
+					}
+				}
+			}
+		}
+	}
 }
 
 
@@ -1331,8 +2622,7 @@ window.addEventListener('load', function () {
 	linesCtx = linesCanvas.getContext("2d");
 	tempCanvas = document.createElement("canvas");
 	tempCtx = tempCanvas.getContext("2d");
-	transitionCanvas = document.getElementById("transitionCanvas");
-	tCtx = transitionCanvas.getContext("2d");
+	transition_canvas = new TransitionCanvas();
 	tutorialCanvas = document.getElementById("tutorialCanvas");
 	tutCtx = tutorialCanvas.getContext("2d");
 	tutorialText = document.getElementById("tutorialText");
@@ -1378,7 +2668,7 @@ window.addEventListener('load', function () {
 	uiElems.push(document.getElementById("miniMap"));
 	// closeNotification = document.getElementById("closeNotification");
 	// uiElems.push(closeNotification);
-	prerollElem = document.getElementById("preroll");
+	window.prerollElem = document.getElementById("preroll"); // TODO remove global window
 
 	nameInput = document.getElementById("nameInput");
 	if (localStorage.name) {
@@ -1535,7 +2825,7 @@ function onClose() {
 			showCouldntConnectAfterTransition = true;
 		}
 	} else if (!closedBecauseOfDeath) {
-		doTransition("", false, resetAll);
+		transition_canvas.doTransition("", false, resetAll);
 		// ga("send","event","Game","lost_connection_mid_game");
 		// _paq.push(['trackEvent', 'Game', 'lost_connection_mid_game']);
 		setNotification("The connection was lost :/");
@@ -1561,7 +2851,7 @@ function connectWithTransition(dontDoAds) {
 	if (!isConnectingWithTransition) {
 		isConnectingWithTransition = true;
 		if (doConnect(dontDoAds)) {
-			doTransition("", false, function () {
+			transition_canvas.doTransition("", false, function () {
 				if (!playingAndReady) {
 					isTransitioning = false;
 				}
@@ -1598,7 +2888,6 @@ class GameConnection {
 	isRequestingMyTrail = false;
 	trailPushesDuringRequest = [];
 
-
 	/** @type {number}  time stamp of the opening of the websocket connection */
 	onOpenTime;
 	constructor(url){
@@ -1623,7 +2912,8 @@ class GameConnection {
 			}
 		};
 	}
-	
+
+	//#region Server communication
 	//when WebSocket connection is established
 	onOpen(evt){
 		this.isConnecting = false;
@@ -2110,14 +3400,14 @@ class GameConnection {
 			deathTransitionTimeout = window.setTimeout(function () {
 				// resetAll();
 				if (skipDeathTransition) {
-					doTransition("", false, function () {
+					transition_canvas.doTransition("", false, function () {
 						onClose();
 						resetAll();
 						connectWithTransition(true);
 					});
 				} else {
 					// console.log("before doTransition",isTransitioning);
-					doTransition("GAME OVER", true, null, function () {
+					transition_canvas.doTransition("GAME OVER", true, null, function () {
 						onClose();
 						resetAll();
 					}, true);
@@ -2204,7 +3494,13 @@ class GameConnection {
 			setLives(currentLives, totalLives);
 		}
 	}
+	//#endregion
 
+	//#region State
+	movePlayers(){
+
+	}
+	//#endregion
 }
 
 function doConnect(dontDoAds) {
@@ -2292,7 +3588,7 @@ function initSkinScreen() {
 	skinButtonCtx = skinButtonCanvas.getContext("2d");
 	skinButtonCanvas.onclick = function () {
 		if (!game_connection && !isTransitioning && !playingAndReady) {
-			doTransition("", false, openSkinScreen);
+			transition_canvas.doTransition("", false, openSkinScreen);
 		}
 	};
 
@@ -2324,7 +3620,7 @@ function initSkinScreen() {
 		skinButton(1, 1);
 	};
 	document.getElementById("skinSave").onclick = function () {
-		doTransition("", false, showBeginHideSkin);
+		transition_canvas.doTransition("", false, showBeginHideSkin);
 	};
 
 	var block = getBlock(0, 0, skinButtonBlocks);
@@ -2988,67 +4284,6 @@ function calcCamOffset() {
 	camPosOffset[1] *= limit;
 }
 
-function lerp(a, b, t) {
-	return a + t * (b - a);
-}
-
-//inverse lerp
-function iLerp(a, b, t) {
-	return (t - a) / (b - a);
-}
-
-//fixed lerp, calls lerp() multiple times when having a lower framerate
-function lerpt(a, b, t) {
-	return lerptt(a, b, t, deltaTime / 16.6666);
-}
-
-//lerps between a and b over t, where tt is the amount of times that lerp should becalled
-function lerptt(a, b, t, tt) {
-	var newT = 1 - Math.pow(1 - t, tt);
-	return lerp(a, b, newT);
-}
-
-//lerps an array
-function lerpA(a, b, t) {
-	var newArray = [];
-	for (var i = 0; i < a.length; i++) {
-		newArray.push(lerp(a[i], b[i], t));
-	}
-	return newArray;
-}
-
-//fixed modulo
-function mod(n, m) {
-	return ((n % m) + m) % m;
-}
-
-//clamp
-function clamp(v, min, max) {
-	return Math.max(min, Math.min(max, v));
-}
-
-function clamp01(v) {
-	return clamp(v, 0, 1);
-}
-
-//returns random item from array
-function randFromArray(array) {
-	return array[Math.floor(Math.random() * array.length)];
-}
-
-//limits a value between -1 and 1 without clamping,
-//v will gradually move towards 1/-1 but will never actually reach it
-function smoothLimit(v) {
-	var negative = v < 0;
-	if (negative) {
-		v *= -1;
-	}
-	v = 1 - Math.pow(2, -v);
-	if (negative) {
-		v *= -1;
-	}
-	return v;
-}
 
 //updates the stats in the bottom left corner
 function updateStats() {
@@ -3087,7 +4322,14 @@ function drawTrailOnCtx(drawCalls, trail, lastPos) {
 	}
 }
 
-//draws diagonal lines on a canvas, can be used as mask and stuff like that
+/**
+ * draws diagonal lines on a canvas, can be used as mask and stuff like that
+ * @param {CanvasRenderingContext2D} ctx 
+ * @param {string | CanvasGradient | CanvasPattern} color 
+ * @param {number} thickness
+ * @param {number} spaceBetween 
+ * @param {number} offset
+ */
 function drawDiagonalLines(ctx, color, thickness, spaceBetween, offset) {
 	if (thickness > 0) {
 		ctx.lineCap = "butt";
@@ -3111,76 +4353,7 @@ function drawDiagonalLines(ctx, color, thickness, spaceBetween, offset) {
 	}
 }
 
-function drawAnimatedText(ctx, text, time, x, y, fontHeight, color, font, textExtrude, charSpeed, orderSeed) {
-	var t2;
-	if (color === undefined) {
-		color = "white";
-	}
-	ctx.fillStyle = color;
-	if (font === undefined) {
-		font = "Arial, Helvetica, sans-serif";
-	}
-	ctx.font = font = fontHeight + "px " + font;
-	if (orderSeed === undefined) {
-		orderSeed = 0;
-	}
-	var lastWidth = 0;
-	for (var charI = 0; charI < transitionText.length; charI++) {
-		var rndOffset = rndSeed(charI + orderSeed);
-		if (charSpeed === undefined) {
-			charSpeed = 3;
-		}
-		var charT = time * charSpeed - (rndOffset * (charSpeed - rndOffset));
-		var thisChar = transitionText[charI];
-		var charWidth = ctx.measureText(thisChar).width;
-		var yMin = y - fontHeight * 0.77;
-		if (charT < 0.8) {
-			tempCanvas.width = charWidth;
-			tempCanvas.height = fontHeight;
-			tempCtx.font = font;
-			tempCtx.fillStyle = "white";
-			tempCtx.fillText(thisChar, 0, fontHeight * 0.77);
-			if (charT < 0.4) {
-				t2 = charT / 0.4;
 
-				tempCtx.beginPath();
-				tempCtx.moveTo(0, lerp(fontHeight, 0, t2));
-				tempCtx.lineTo(0, fontHeight);
-				tempCtx.lineTo(lerp(0, charWidth, t2), fontHeight);
-				tempCtx.closePath();
-			} else {
-				t2 = charT / 0.4 - 1;
-				tempCtx.moveTo(0, 0);
-				tempCtx.lineTo(0, fontHeight);
-				tempCtx.lineTo(charWidth, fontHeight);
-				tempCtx.lineTo(charWidth, lerp(fontHeight, 0, t2));
-				tempCtx.lineTo(lerp(0, charWidth, t2), 0);
-			}
-			tempCtx.globalCompositeOperation = "destination-in";
-			tempCtx.fill();
-			ctx.drawImage(tempCanvas, x + lastWidth, yMin);
-		} else {
-			t2 = Math.min(1, charT * 5 - 4);
-			var offset = t2 * textExtrude;
-			ctx.fillStyle = colors.green2.darker;
-			for (var i = 0; i < offset; i++) {
-				ctx.fillText(thisChar, x + lastWidth - offset + i, y - offset + i);
-			}
-			ctx.fillStyle = "white";
-			ctx.fillText(thisChar, x + lastWidth - offset, y - offset);
-		}
-		lastWidth += charWidth - 0.5;
-	}
-}
-
-//orders two positions so that pos1 is in the top left and pos2 in the bottom right
-function orderTwoPos(pos1, pos2) {
-	var x1 = Math.min(pos1[0], pos2[0]);
-	var y1 = Math.min(pos1[1], pos2[1]);
-	var x2 = Math.max(pos1[0], pos2[0]);
-	var y2 = Math.max(pos1[1], pos2[1]);
-	return [[x1, y1], [x2, y2]];
-}
 
 //fills an area, if array is not specified it defaults to blocks[]
 function fillArea(x, y, w, h, type, pattern, array, isEdgeChunk = false) {
@@ -3699,28 +4872,6 @@ function onTouchEnd(e) {
 	}
 }
 
-//starts the transition
-//reverseOnHalf: start playing backwords once it is showing the title
-//callback1: callback fired once the transition is full screen for the first time
-//callback2: fired when full screen for the second time, only shown when reverseOnHalf = true
-function doTransition(text, reverseOnHalf, callback1, callback2, overrideExisting) {
-	// console.log("doTransition()", text, reverseOnHalf, callback1, callback2, overrideExisting);
-	// console.log("isTransitioning:",isTransitioning);
-	if (!isTransitioning || overrideExisting) {
-		transitionText = text;
-		isTransitioning = true;
-		transitionDirection = 1;
-		transitionTimer = transitionPrevTimer = 0;
-		transitionCanvas.style.display = null;
-		if (reverseOnHalf === undefined) {
-			reverseOnHalf = false;
-		}
-		transitionReverseOnHalf = reverseOnHalf;
-		transitionCallback1 = callback1;
-		transitionCallback2 = callback2;
-	}
-}
-
 function doSkipDeathTransition() {
 	if (allowSkipDeathTransition) {
 		if (deathTransitionTimeout !== null) {
@@ -3732,36 +4883,6 @@ function doSkipDeathTransition() {
 		skipDeathTransition = true;
 	}
 }
-
-//random number between 0 and 1 using a seed
-function rndSeed(seed) {
-	var x = Math.sin(seed) * 10000;
-	return x - Math.floor(x);
-}
-
-//easing functions
-var ease = {
-	// in: function(t){
-	// 	return t === 0 ? 0 : Math.pow( 2, 10 * t - 10 );
-	// },
-	// out: function(t){
-	// 	return t === 1 ? 1 : 1 - Math.pow( 2, -10 * t );
-	// },
-	// inout: function(t){
-	// 	return t === 0 ? 0 : t === 1 ? 1 : t < 0.5 ?
-	// 				Math.pow( 2, 20 * t - 10 ) / 2 :
-	// 				( 2 - Math.pow( 2, -20 * t + 10 ) ) / 2;
-	// }
-	in: function (t) {
-		return t * t * t * t;
-	},
-	out: function (t) {
-		return 1 - Math.pow(1 - t, 4);
-	},
-	inout: function (t) {
-		return t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2;
-	},
-};
 
 //draws blocks on ctx
 function drawBlocks(ctx, blocks, checkViewport) {
@@ -4255,7 +5376,7 @@ function drawPlayer(ctx, player, timeStamp) {
 function moveDrawPosToPos(player) {
 	// var xDist = Math.abs(player.pos[0] - player.drawPos[0]);
 	// var yDist = Math.abs(player.pos[1] - player.drawPos[1]);
-	var target = null;
+	let target;
 	if (player.isDead && !player.deathWasCertain) {
 		target = player.uncertainDeathPosition;
 	} else {
@@ -4391,12 +5512,12 @@ function loop(timeStamp) {
 
 	deltaTime = realDeltaTime + totalDeltaTimeFromCap;
 	prevTimeStamp = timeStamp;
-
 	if (deltaTime < getDtCap(currentDtCap) && localStorage.dontCapFps != "true") {
 		totalDeltaTimeFromCap += realDeltaTime;
 	} else {
 		totalDeltaTimeFromCap = 0;
-
+		if(playingAndReady){
+		//#region Main canvas
 		canvasTransformType = canvasTransformTypes.MAIN;
 
 		ctxCanvasSize(ctx);
@@ -4589,7 +5710,8 @@ function loop(timeStamp) {
 			ctx.drawImage(linesCanvas, 0, 0);
 			ctx.globalCompositeOperation = "source-over";
 		}
-
+		//#endregion Main canvas
+		}
 		//corner stats
 		scoreStat = lerpt(scoreStat, scoreStatTarget, 0.1);
 		myScoreElem.innerHTML = Math.round(scoreStat);
@@ -4598,135 +5720,7 @@ function loop(timeStamp) {
 
 		//transition canvas
 		if (isTransitioning) {
-			// transitionTimer = 1;
-			var DARK_EDGE_SIZE = 10, TITLE_HEIGHT = 60, TITLE_DURATION = 2, TITLE_PADDING = 10, TEXT_EXTRUDE = 5;
-			TITLE_HEIGHT *= MAX_PIXEL_RATIO;
-			TEXT_EXTRUDE *= MAX_PIXEL_RATIO;
-			transitionTimer += deltaTime * transitionDirection * 0.001;
-
-			if (
-				transitionDirection == 1 && transitionCallback1 !== null && transitionTimer >= 0.5 &&
-				transitionPrevTimer < 0.5
-			) {
-				transitionTimer = 0.5;
-				transitionCallback1();
-			}
-
-			if (
-				transitionDirection == -1 && transitionCallback2 !== null && transitionTimer <= 0.5 &&
-				transitionPrevTimer > 0.5
-			) {
-				transitionTimer = 0.5;
-				transitionCallback2();
-			}
-
-			if (
-				transitionReverseOnHalf && transitionDirection == 1 && transitionTimer >= 1 + TITLE_DURATION &&
-				transitionPrevTimer < 1 + TITLE_DURATION
-			) {
-				transitionDirection = -1;
-				transitionTimer = 1;
-			}
-
-			transitionPrevTimer = transitionTimer;
-			if (
-				(transitionTimer <= 0 && transitionReverseOnHalf) ||
-				(transitionTimer >= TITLE_DURATION + 1.5 && !transitionReverseOnHalf)
-			) {
-				transitionDirection = 0;
-				isTransitioning = false;
-				transitionCanvas.style.display = "none";
-			} else {
-				ctxCanvasSize(tCtx, true);
-
-				var w = transitionCanvas.width, h = transitionCanvas.height;
-				t = transitionTimer;
-				if (t < 0.5) {
-					t2 = t * 2;
-					t2 = ease.in(t2);
-					tCtx.fillStyle = colors.green2.darker;
-					tCtx.fillRect(0, lerp(-DARK_EDGE_SIZE, h / 2, t2), w, DARK_EDGE_SIZE);
-					tCtx.fillStyle = colors.green2.brighter;
-					tCtx.fillRect(0, -DARK_EDGE_SIZE, w, lerp(0, h / 2 + DARK_EDGE_SIZE, t2));
-					tCtx.fillRect(0, lerp(h, h / 2, t2), w, h);
-				} else if (t < 1) {
-					t2 = t * 2 - 1;
-					t2 = ease.out(t2);
-					if (transitionText) {
-						tCtx.fillStyle = colors.green2.darker;
-						tCtx.fillRect(
-							0,
-							lerp(0, h / 2 - TITLE_HEIGHT / 2, t2),
-							w,
-							lerp(h, TITLE_HEIGHT + DARK_EDGE_SIZE, t2),
-						);
-						tCtx.fillStyle = colors.green2.brighter;
-						tCtx.fillRect(0, lerp(0, h / 2 - TITLE_HEIGHT / 2, t2), w, lerp(h, TITLE_HEIGHT, t2));
-					} else {
-						tCtx.fillStyle = colors.green2.darker;
-						tCtx.fillRect(0, lerp(0, h / 2, t2), w, lerp(h, DARK_EDGE_SIZE, t2));
-						tCtx.fillStyle = colors.green2.brighter;
-						tCtx.fillRect(0, lerp(0, h / 2, t2), w, lerp(h, 0, t2));
-					}
-				} else if (t < 1 + TITLE_DURATION) {
-					if (transitionText) {
-						tCtx.fillStyle = colors.green2.darker;
-						tCtx.fillRect(0, h / 2, w, TITLE_HEIGHT / 2 + DARK_EDGE_SIZE);
-						tCtx.fillStyle = colors.green2.brighter;
-						tCtx.fillRect(0, h / 2 - TITLE_HEIGHT / 2, w, TITLE_HEIGHT);
-					} else {
-						transitionTimer = TITLE_DURATION + 1.5;
-					}
-				} else if (t < TITLE_DURATION + 1.5) {
-					t2 = (t - TITLE_DURATION - 1) * 2;
-					t2 = ease.in(t2);
-					tCtx.fillStyle = colors.green2.darker;
-					tCtx.fillRect(0, h / 2, w, lerp(TITLE_HEIGHT / 2 + DARK_EDGE_SIZE, DARK_EDGE_SIZE, t2));
-					tCtx.fillStyle = colors.green2.brighter;
-					tCtx.fillRect(0, lerp(h / 2 - TITLE_HEIGHT / 2, h / 2, t2), w, lerp(TITLE_HEIGHT, 0, t2));
-				}
-
-				if (t > 0.5 && t < 3.5) {
-					var fontHeight = TITLE_HEIGHT - TITLE_PADDING * 2;
-					tCtx.font = fontHeight + "px Arial, Helvetica, sans-serif";
-					var totalWidth = tCtx.measureText(transitionText).width;
-					var x = w / 2 - totalWidth / 2 + TEXT_EXTRUDE / 2;
-					var y = h / 2 + fontHeight * 0.37 + TEXT_EXTRUDE / 2;
-					t2 = t;
-					if (t < 1.1) {
-						t2 = iLerp(0.5, 1.1, t);
-					} else if (t < 2.9) {
-						t2 = 1;
-					} else {
-						t2 = iLerp(3.5, 2.9, t);
-					}
-					drawAnimatedText(
-						tCtx,
-						transitionText,
-						t2,
-						x,
-						y,
-						fontHeight,
-						"white",
-						"Arial, Helvetica, sans-serif",
-						TEXT_EXTRUDE,
-						3,
-						16842438,
-					);
-					// tCtx.fillStyle = "white";
-					// tCtx.fillText(transitionText, x, y);
-				}
-
-				tCtx.restore();
-			}
-
-			//skip death transition
-			if (skipDeathTransition && transitionText == "GAME OVER" && transitionTimer > 1) {
-				transitionTimer = 1.1;
-				transitionDirection = -1;
-				allowSkipDeathTransition = false;
-				skipDeathTransition = false;
-			}
+			transition_canvas.render();
 		}
 
 		//lives
@@ -5003,7 +5997,7 @@ function loop(timeStamp) {
 			}
 		}
 
-		//debug info
+		//debug info (red ping stats)
 		if (localStorage.drawDebug == "true") {
 			var avg = Math.round(game_connection.serverAvgPing);
 			var last = Math.round(game_connection.serverLastPing);
@@ -5351,116 +6345,4 @@ function filter(str) {
 		words[i] = word;
 	}
 	return words.join(" ");
-}
-
-//stackoverflow.com/a/22373135/3625298
-// http://www.onicos.com/staff/iz/amuse/javascript/expert/utf.txt
-
-/* utf.js - UTF-8 <=> UTF-16 convertion
- *
- * Copyright (C) 1999 Masanao Izumo <iz@onicos.co.jp>
- * Version: 1.0
- * LastModified: Dec 25 1999
- * This library is free.  You can redistribute it and/or modify it.
- */
-
-function Utf8ArrayToStr(array) {
-	var out, i, len, c;
-	var char2, char3;
-
-	out = "";
-	len = array.length;
-	i = 0;
-	while (i < len) {
-		c = array[i++];
-		switch (c >> 4) {
-			case 0:
-			case 1:
-			case 2:
-			case 3:
-			case 4:
-			case 5:
-			case 6:
-			case 7:
-				// 0xxxxxxx
-				out += String.fromCharCode(c);
-				break;
-			case 12:
-			case 13:
-				// 110x xxxx   10xx xxxx
-				char2 = array[i++];
-				out += String.fromCharCode(((c & 0x1F) << 6) | (char2 & 0x3F));
-				break;
-			case 14:
-				// 1110 xxxx  10xx xxxx  10xx xxxx
-				char2 = array[i++];
-				char3 = array[i++];
-				out += String.fromCharCode(
-					((c & 0x0F) << 12) |
-						((char2 & 0x3F) << 6) |
-						((char3 & 0x3F) << 0),
-				);
-				break;
-		}
-	}
-
-	return out;
-}
-
-function bytesToInt() {
-	var integer = 0;
-	var multiplier = 0;
-	for (var i = arguments.length - 1; i >= 0; i--) {
-		var thisArg = arguments[i];
-		integer = (integer | (((thisArg & 0xff) << multiplier) >>> 0)) >>> 0;
-		multiplier += 8;
-	}
-	return integer;
-}
-
-function intToBytes(integer, byteCount) {
-	var bytes = [];
-	for (var i = 0; i < byteCount; i++) {
-		var byte = integer & 0xff;
-		bytes[byteCount - i - 1] = byte;
-		integer = (integer - byte) / 256;
-	}
-	return bytes;
-}
-
-function parseTimeToString(seconds) {
-	var hours = Math.floor(seconds / 3600);
-	var minutes = Math.floor((seconds - (hours * 3600)) / 60);
-	seconds = seconds - (hours * 3600) - (minutes * 60);
-	if (hours <= 0) {
-		var secondsS = seconds == 1 ? "" : "s";
-		if (minutes <= 0) {
-			return seconds + " second" + secondsS;
-		} else {
-			var minutesS = minutes == 1 ? "" : "s";
-			return minutes + " minute" + minutesS + " and " + seconds + " second" + secondsS;
-		}
-	} else {
-		if (hours < 10) hours = "0" + hours;
-		if (minutes < 10) minutes = "0" + minutes;
-		if (seconds < 10) seconds = "0" + seconds;
-		return hours + ":" + minutes + ":" + seconds;
-	}
-}
-
-function parseQuery(url) {
-	var startIndex = url.indexOf("?");
-	if (startIndex < 0) {
-		return {};
-	}
-	var queryString = url.substr(startIndex + 1);
-	var queryItems = queryString.split("&");
-	var query = {};
-	for (var i = 0; i < queryItems.length; i++) {
-		var split = queryItems[i].split("=");
-		if (split.length == 2) {
-			query[split[0]] = split[1];
-		}
-	}
-	return query;
 }
