@@ -3,7 +3,7 @@
 const GLOBAL_SPEED = 0.006;
 const VIEWPORT_RADIUS = 30;
 const MAX_ZOOM = 10000;
-const BLOCKS_ON_SCREEN = 1100;
+window.BLOCKS_ON_SCREEN = 1100; // Global for zoom mode
 // const BLOCKS_ON_SCREEN = 20000;
 const WAIT_FOR_DISCONNECTED_MS = 1000;
 const USERNAME_SIZE = 6;
@@ -774,6 +774,7 @@ class SplixBaseCanvas {
 			const biggest = Math.max(main_canvas.canvas.width, main_canvas.canvas.height);
 			const zoomEdge = biggest / MAX_ZOOM;
 			const pixelsAvailable = main_canvas.canvas.width * main_canvas.canvas.height;
+			console.log(BLOCKS_ON_SCREEN);
 			const pixelsPerBlock = pixelsAvailable / BLOCKS_ON_SCREEN;
 			const zoomBlocks = Math.sqrt(pixelsPerBlock) / 10;
 			zoom = Math.max(zoomBlocks, zoomEdge);
