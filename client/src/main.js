@@ -729,7 +729,7 @@ class SplixBaseCanvas {
 	}
 
 	get w(){
-		let w = window.innerHeight;
+		let w = window.innerWidth;
 		if (this.canvasTransformType == canvasTransformTypes.SKIN_BUTTON) {
 			w = 30;
 		}
@@ -2450,6 +2450,67 @@ class SkinButtonCanvas extends SplixBaseCamera {
 	}
 
 }
+
+class SkinScreen extends SplixBaseCamera {
+	canvasTransformType = canvasTransformTypes.SKIN;
+	blocks = [];
+	#visible = true;
+	/** @type {HTMLElement} */
+	container;
+	constructor(canvas,container){
+		super(canvas);
+		this.container = container;
+		let currentColor = localStorage.getItem("skinColor");
+		if (currentColor === null) {
+			currentColor = 0;
+		}
+		currentColor = parseInt(currentColor);
+
+		let currentPattern = localStorage.getItem("skinPattern");
+		if (currentPattern === null) {
+			currentPattern = 0;
+		}
+		currentPattern = parseInt(currentPattern);
+		fillArea(0, 0, VIEWPORT_RADIUS * 2, VIEWPORT_RADIUS * 2, currentColor + 1, currentPattern, this.blocks);
+	
+		document.getElementById("prevColor").addEventListener('click', () => {
+			skinButton(-1, 0);
+		});
+		document.getElementById("nextColor").addEventListener('click', () => {
+			skinButton(1, 0);
+		});
+		document.getElementById("prevPattern").addEventListener('click', () => {
+			skinButton(-1, 1);
+		});
+		document.getElementById("nextPattern").addEventListener('click', () => {
+			skinButton(1, 1);
+		});
+		document.getElementById("skinSave").addEventListener('click', () => {
+			transition_canvas.doTransition("", false, showBeginHideSkin);
+		});
+	
+	}
+
+	render(){
+		this.ctxApplyCamTransform(true);
+		this.drawBlocks(this.blocks);
+		this.ctx.restore();
+	}
+
+	show(){
+		this.container.style.display = null;
+		this.#visible = true;
+	}
+
+	hide(){
+		this.container.style.display = "none";
+		this.#visible = false;
+	}
+
+	get visible() {
+		return this.#visible;
+	}
+}
 //#endregion
 
 class SplixState {
@@ -2533,16 +2594,14 @@ var lastClientsideMoves = [],
 	isRequestingMyTrail = false,
 	skipTrailRequestResponse = false;
 var mapSize = 2000, closedBecauseOfDeath = false, beginScreenVisible = true, wsOnOpenTime;
-/**@type {MinimapCanvas} */
-let minimap_canvas;
 var canvasQuality = 1,
-	currentDtCap = 0,
+currentDtCap = 0,
 	totalDeltaTimeFromCap = 0,
 	deltaTime = 16.66,
 	lerpedDeltaTime = 16.66,
 	missedFrames = [],
 	gainedFrames = [];
-var myScoreElem,
+	var myScoreElem,
 	myKillsElem,
 	myRealScoreElem,
 	myRankElem,
@@ -2560,21 +2619,24 @@ var miniMapPlayer,
 	lastNameValue = "",
 	lastNameChangeCheck = 0;
 var scoreStatTarget = 25, scoreStat = 25, realScoreStatTarget = 25, realScoreStat = 25;
-var linesCanvas, linesCtx, tempCanvas, tempCtx;
 var showCouldntConnectAfterTransition = false, playingAndReady = false, canRunAds = false;
+var isTransitioning = false;
+var touchControlsElem;
+/**@type {MinimapCanvas} */
+let minimap_canvas;
 /** @type {TransitionCanvas} */
 let transition_canvas;
-var isTransitioning = false;
 /** @type {TutorialCanvas} */
 let tutorial;
-var touchControlsElem;
 /** @type {SkinButtonCanvas} */
 let skin_button;
-var skinCanvas, skinCtx, skinScreen, skinScreenVisible = false, skinScreenBlocks;
+/** @type {SkinScreen} */
+let skin_screen;
 /** @type {SplixLogoCanvas} Canvas for splix animated logo */ 
 let title_canvas;
+/** @type {LifeBox} */
+let life_box;
 var currentTouches = [], doRefreshAfterDie = false, pressedKeys = [];
-var camRotOffset = 0;
 var honkStartTime = undefined, lastHonkTime = 0, honkSfx = null;
 var skipDeathTransition = false, allowSkipDeathTransition = false, deathTransitionTimeout = null;
 var closeNotification = null, connectionLostNotification = null;
@@ -3251,26 +3313,27 @@ function honkEnd() {
 window.addEventListener('load', function () {
 	main_canvas = new SplixCanvas(document.getElementById("mainCanvas"));
 	minimap_canvas = new MinimapCanvas(document.getElementById("minimapCanvas"));
-	linesCanvas = document.createElement("canvas");
-	linesCtx = linesCanvas.getContext("2d");
-	tempCanvas = document.createElement("canvas");
-	tempCtx = tempCanvas.getContext("2d");
 	transition_canvas = new TransitionCanvas(document.getElementById("transitionCanvas"));
 	tutorial = new TutorialCanvas(
 		document.getElementById("tutorialCanvas"),
 		document.getElementById("tutorialText")
 	);
+	skin_screen = new SkinScreen(
+		document.getElementById("skinScreenCanvas"),
+		document.getElementById("skinScreen"),
+	);
+	skin_button = new SkinButtonCanvas(
+		document.getElementById("skinButton"),
+		document.getElementById("skinButtonShadow"),
+	);
+	life_box = new LifeBox();
 	touchControlsElem = document.getElementById("touchControls");
 	notificationElem = document.getElementById("notification");
-	skinScreen = document.getElementById("skinScreen");
-	skinCanvas = document.getElementById("skinScreenCanvas");
-	skinCtx = skinCanvas.getContext("2d");
 	lastStatValueElem = document.getElementById("lastStatsRight");
 	bestStatValueElem = document.getElementById("bestStatsRight");
 	joinButton = document.getElementById("joinButton");
 	qualityText = document.getElementById("qualityText");
 	uglyText = document.getElementById("uglyText");
-	life_box = new LifeBox();
 
 	window.addEventListener("blur", function (event) {
 		pressedKeys = [];
@@ -3342,8 +3405,6 @@ window.addEventListener('load', function () {
 	uglyText.onclick = toggleUglyMode;
 	setQuality();
 	setUglyText();
-
-	initSkinScreen();
 	title_canvas = new SplixLogoCanvas(document.getElementById("logoCanvas"));
 	setLeaderboardVisibility();
 
@@ -3373,7 +3434,7 @@ window.addEventListener('load', function () {
 
 //called when successfully connected and when the transition is full screen
 function onConnectOrMiddleOfTransition() {
-	hideSkinScreen();
+	skin_screen.hide();
 	hideBeginShowMain();
 }
 
@@ -3416,19 +3477,9 @@ function hideMainCanvas() {
 	touchControlsElem.style.display = "none";
 }
 
-function showSkinScreen() {
-	skinScreenVisible = true;
-	skinScreen.style.display = null;
-}
-
-function hideSkinScreen() {
-	skinScreenVisible = false;
-	skinScreen.style.display = "none";
-}
-
 function openSkinScreen() {
 	hideBegin();
-	showSkinScreen();
+	skin_screen.show();
 }
 
 //hides main canvas and ui and shows beginScreen
@@ -3440,7 +3491,7 @@ function showBeginHideMainCanvas() {
 
 function showBeginHideSkin() {
 	showBegin();
-	hideSkinScreen();
+	skin_screen.hide();
 }
 
 //when WebSocket connection is closed
@@ -4175,45 +4226,6 @@ function resetAll() {
 	life_box.clearAllLives();
 }
 
-//initiate skinScreenBlocks and buttons
-function initSkinScreen() {
-	skin_button = new SkinButtonCanvas(
-		document.getElementById("skinButton"),
-		document.getElementById("skinButtonShadow"),
-	);
-
-	let currentColor = localStorage.getItem("skinColor");
-	if (currentColor === null) {
-		currentColor = 0;
-	}
-	currentColor = parseInt(currentColor);
-
-	let currentPattern = localStorage.getItem("skinPattern");
-	if (currentPattern === null) {
-		currentPattern = 0;
-	}
-	currentPattern = parseInt(currentPattern);
-	
-	skinScreenBlocks = [];
-	fillArea(0, 0, VIEWPORT_RADIUS * 2, VIEWPORT_RADIUS * 2, currentColor + 1, currentPattern, skinScreenBlocks);
-
-	document.getElementById("prevColor").onclick = function () {
-		skinButton(-1, 0);
-	};
-	document.getElementById("nextColor").onclick = function () {
-		skinButton(1, 0);
-	};
-	document.getElementById("prevPattern").onclick = function () {
-		skinButton(-1, 1);
-	};
-	document.getElementById("nextPattern").onclick = function () {
-		skinButton(1, 1);
-	};
-	document.getElementById("skinSave").onclick = function () {
-		transition_canvas.doTransition("", false, showBeginHideSkin);
-	};
-}
-
 function testHashForMobile() {
 	if (deviceType != DeviceTypes.DESKTOP) {
 		var hash = location.hash;
@@ -4342,13 +4354,10 @@ function updateSkin() {
 		VIEWPORT_RADIUS * 2,
 		blockId,
 		parseInt(localStorage.skinPattern),
-		skinScreenBlocks,
+		skin_screen.blocks,
 	);
 	skin_button.blocks[0].setBlockId(blockId);
 }
-
-//lives stuff
-let life_box;
 
 //engagement meter
 var engagementIsPlaying = localStorage.engagementIsPlaying == "true";
@@ -4552,79 +4561,6 @@ function getColorForBlockSkinId(id) {
 	}
 }
 
-//sets the with/height of a full screen canvas, takes retina displays into account
-function ctxCanvasSize(ctx, dontUseQuality) {
-	var w = window.innerWidth, h = window.innerHeight;
-	if (canvasTransformType == canvasTransformTypes.TUTORIAL) {
-		w = h = 300;
-	}
-	if (canvasTransformType == canvasTransformTypes.SKIN_BUTTON) {
-		w = h = 30;
-	}
-	if (canvasTransformType == canvasTransformTypes.LIFE) {
-		w = h = 60;
-	}
-	if (canvasTransformType == canvasTransformTypes.TITLE) {
-		w = 520;
-		h = 180;
-	}
-	var quality = dontUseQuality ? 1 : canvasQuality;
-	var c = ctx.canvas;
-	// PIXEL_RATIO = 1;
-	c.width = w * MAX_PIXEL_RATIO * quality;
-	c.height = h * MAX_PIXEL_RATIO * quality;
-	var styleRatio = 1;
-	if (canvasTransformType == canvasTransformTypes.TITLE) {
-		styleRatio = Math.min(1, (window.innerWidth - 30) / w);
-	}
-	c.style.width = w * styleRatio + "px";
-	c.style.height = h * styleRatio + "px";
-}
-
-//apply camera transformations on a canvas
-//canvasTransformType is a global that determines what
-//transformation should be used
-var canvasTransformType = canvasTransformTypes.MAIN;
-function ctxApplyCamTransform(ctx, setSize, dontUseQuality) {
-	if (setSize) {
-		ctxCanvasSize(ctx, dontUseQuality);
-	}
-	ctx.save();
-	var quality = dontUseQuality ? 1 : canvasQuality;
-	if (canvasTransformType != canvasTransformTypes.MAIN && canvasTransformType != canvasTransformTypes.SKIN) {
-		ctx.setTransform(MAX_PIXEL_RATIO * quality, 0, 0, MAX_PIXEL_RATIO * quality, 0, 0);
-	}
-	if (canvasTransformType == canvasTransformTypes.MAIN || canvasTransformType == canvasTransformTypes.SKIN) {
-		var isMain = canvasTransformType == canvasTransformTypes.MAIN;
-		ctx.translate(main_canvas.canvas.width / 2, main_canvas.canvas.height / 2);
-		var biggest = Math.max(main_canvas.canvas.width, main_canvas.canvas.height);
-		var zoomEdge = biggest / MAX_ZOOM;
-		var pixelsAvailable = main_canvas.canvas.width * main_canvas.canvas.height;
-		var pixelsPerBlock = pixelsAvailable / BLOCKS_ON_SCREEN;
-		var zoomBlocks = Math.sqrt(pixelsPerBlock) / 10;
-		zoom = Math.max(zoomBlocks, zoomEdge);
-		if (isMain) {
-			ctx.rotate(camRotOffset);
-		}
-		ctx.scale(zoom, zoom);
-		if (isMain) {
-			ctx.translate(
-				-main_canvas.camPosPrevFrame[0] * 10
-				- main_canvas.camPosOffset[0],
-				
-				-main_canvas.camPosPrevFrame[1] * 10
-				- main_canvas.camPosOffset[1]
-			);
-		} else {
-			ctx.translate(-VIEWPORT_RADIUS * 10, -VIEWPORT_RADIUS * 10);
-		}
-	} else if (
-		canvasTransformType == canvasTransformTypes.TUTORIAL || canvasTransformType == canvasTransformTypes.SKIN_BUTTON
-	) {
-		ctx.scale(3, 3);
-	}
-}
-
 //updates the stats in the bottom left corner
 function updateStats() {
 	if (myRank > totalPlayers && myRankSent) {
@@ -4658,37 +4594,6 @@ function drawTrailOnCtx(drawCalls, trail, lastPos) {
 				thisCtx.lineTo(lastPos[0] * 10 + offset, lastPos[1] * 10 + offset);
 			}
 			thisCtx.stroke();
-		}
-	}
-}
-
-/**
- * draws diagonal lines on a canvas, can be used as mask and stuff like that
- * @param {CanvasRenderingContext2D} ctx 
- * @param {string | CanvasGradient | CanvasPattern} color 
- * @param {number} thickness
- * @param {number} spaceBetween 
- * @param {number} offset
- */
-function drawDiagonalLines(ctx, color, thickness, spaceBetween, offset) {
-	if (thickness > 0) {
-		ctx.lineCap = "butt";
-		ctx.strokeStyle = color;
-		ctx.lineWidth = thickness;
-		var minSize = VIEWPORT_RADIUS * 20;
-		var xOffset = 0;
-		var yOffset = 0;
-		if (main_canvas.camPosPrevFrame !== null && canvasTransformType == canvasTransformTypes.MAIN) {
-			xOffset = Math.round((main_canvas.camPosPrevFrame[0] * 10 - minSize / 2) / spaceBetween) * spaceBetween;
-			yOffset = Math.round((main_canvas.camPosPrevFrame[1] * 10 - minSize / 2) / spaceBetween) * spaceBetween;
-		}
-		xOffset += offset % spaceBetween;
-		for (var i = -minSize; i < minSize; i += spaceBetween) {
-			var thisXOffset = xOffset + i;
-			ctx.beginPath();
-			ctx.moveTo(thisXOffset, yOffset);
-			ctx.lineTo(thisXOffset + minSize, yOffset + minSize);
-			ctx.stroke();
 		}
 	}
 }
@@ -5225,504 +5130,6 @@ function doSkipDeathTransition() {
 	}
 }
 
-//draws blocks on ctx
-function drawBlocks(ctx, blocks, checkViewport) {
-	var t2;
-	for (var i = 0; i < blocks.length; i++) {
-		var block = blocks[i];
-		if (
-			checkViewport &&
-			(
-				block.x < main_canvas.camPos[0] - VIEWPORT_RADIUS ||
-				block.x > main_canvas.camPos[0] + VIEWPORT_RADIUS ||
-				block.y < main_canvas.camPos[1] - VIEWPORT_RADIUS ||
-				block.y > main_canvas.camPos[1] + VIEWPORT_RADIUS
-			)
-		) {
-			//outside viewport, don't render this block
-		} else {
-			if (block.animDelay > 0) {
-				block.animDelay -= deltaTime;
-			} else {
-				block.animProgress += deltaTime * block.animDirection * 0.003;
-			}
-			if (block.animProgress > 1) {
-				block.animDirection = 0;
-				block.animProgress = 1;
-			}
-			if (block.animProgress < 0) {
-				block.currentBlock = block.nextBlock;
-				block.animDirection = 1;
-				block.animProgress = 0;
-			} else {
-				var t = block.animProgress;
-
-				//edge
-				if (block.currentBlock === 0) {
-					ctx.fillStyle = colors.red.boundsDark;
-					ctx.fillRect(block.x * 10, block.y * 10, 10, 10);
-					if (!uglyMode) {
-						linesCtx.fillStyle = colors.grey.diagonalLines;
-						linesCtx.fillRect(block.x * 10, block.y * 10, 10, 10);
-					}
-				}
-				//empty block
-				if (block.currentBlock == 1) {
-					//shadow edge
-					if (t > 0.8 && !uglyMode) {
-						ctx.fillStyle = colors.grey.darker;
-						ctx.fillRect(block.x * 10 + 2, block.y * 10 + 2, 7, 7);
-					}
-
-					//bright surface
-					ctx.fillStyle = colors.grey.brighter;
-					if (t == 1 || uglyMode) {
-						// ctx.fillStyle = colors.grey.darker; //shadow edge
-						// ctx.beginPath();
-						// ctx.moveTo(block.x*10 + 1, block.y*10 + 8);
-						// ctx.lineTo(block.x*10 + 2, block.y*10 + 9);
-						// ctx.lineTo(block.x*10 + 9, block.y*10 + 9);
-						// ctx.lineTo(block.x*10 + 9, block.y*10 + 2);
-						// ctx.lineTo(block.x*10 + 8, block.y*10 + 1);
-						// ctx.fill();
-						ctx.fillRect(block.x * 10 + 1, block.y * 10 + 1, 7, 7);
-					} else if (t < 0.4) {
-						t2 = t * 2.5;
-						ctx.beginPath();
-						ctx.moveTo(block.x * 10 + 2, block.y * 10 + lerp(9, 2, t2));
-						ctx.lineTo(block.x * 10 + 2, block.y * 10 + 9);
-						ctx.lineTo(block.x * 10 + lerp(2, 9, t2), block.y * 10 + 9);
-						ctx.fill();
-					} else if (t < 0.8) {
-						t2 = t * 2.5 - 1;
-						ctx.beginPath();
-						ctx.moveTo(block.x * 10 + 2, block.y * 10 + 2);
-						ctx.lineTo(block.x * 10 + 2, block.y * 10 + 9);
-						ctx.lineTo(block.x * 10 + 9, block.y * 10 + 9);
-						ctx.lineTo(block.x * 10 + 9, block.y * 10 + lerp(9, 2, t2));
-						ctx.lineTo(block.x * 10 + lerp(2, 9, t2), block.y * 10 + 2);
-						ctx.fill();
-					} else {
-						t2 = t * 5 - 4;
-						// ctx.fillStyle = colors.grey.darker; //shadow edge
-						// ctx.beginPath();
-						// ctx.moveTo(block.x*10 + lerp(2,1,t2), block.y*10 + lerp(9,8,t2));
-						// ctx.lineTo(block.x*10 + 2, block.y*10 + 9);
-						// ctx.lineTo(block.x*10 + 9, block.y*10 + 9);
-						// ctx.lineTo(block.x*10 + 9, block.y*10 + 2);
-						// ctx.lineTo(block.x*10 + lerp(9,8,t2), block.y*10 + lerp(2,1,t2));
-						// ctx.fill();
-						ctx.fillRect(block.x * 10 + lerp(2, 1, t2), block.y * 10 + lerp(2, 1, t2), 7, 7);
-					}
-				}
-				//regular colors
-				if (block.currentBlock >= 2) {
-					var idForBlockSkinId = (block.currentBlock - 2) % SKIN_BLOCK_COUNT;
-					var thisColor = getColorForBlockSkinId(idForBlockSkinId);
-
-					var isPatternBlock = block.currentBlock > SKIN_BLOCK_COUNT + 1;
-
-					var brightColor = isPatternBlock ? thisColor.pattern : thisColor.brighter;
-					var darkColor = isPatternBlock ? thisColor.patternEdge : thisColor.darker;
-
-					//shadow edge
-					if (t > 0.8 && !uglyMode) {
-						ctx.fillStyle = darkColor;
-						ctx.fillRect(block.x * 10 + 1, block.y * 10 + 1, 9, 9);
-					}
-
-					//bright surface
-					ctx.fillStyle = brightColor;
-					if (t == 1 || uglyMode) {
-						// ctx.fillStyle = thisColor.darker; //shadow edge
-						// ctx.beginPath();
-						// ctx.moveTo(block.x*10     , block.y*10 + 9 );
-						// ctx.lineTo(block.x*10 + 1 , block.y*10 + 10);
-						// ctx.lineTo(block.x*10 + 10, block.y*10 + 10);
-						// ctx.lineTo(block.x*10 + 10, block.y*10 + 1 );
-						// ctx.lineTo(block.x*10 + 9 , block.y*10     );
-						// ctx.fill();
-
-						ctx.fillRect(block.x * 10, block.y * 10, 9, 9);
-						if (idForBlockSkinId == 12 && !uglyMode) {
-							ctx.fillStyle = colors.gold.bevelBright;
-							ctx.fillRect(block.x * 10 + 3, block.y * 10 + 0.1, 6, 0.1);
-						}
-					} else if (t < 0.4) {
-						t2 = t * 2.5;
-						ctx.beginPath();
-						ctx.moveTo(block.x * 10 + 1, block.y * 10 + lerp(10, 1, t2));
-						ctx.lineTo(block.x * 10 + 1, block.y * 10 + 10);
-						ctx.lineTo(block.x * 10 + lerp(1, 10, t2), block.y * 10 + 10);
-						ctx.fill();
-					} else if (t < 0.8) {
-						t2 = t * 2.5 - 1;
-						ctx.beginPath();
-						ctx.moveTo(block.x * 10 + 1, block.y * 10 + 1);
-						ctx.lineTo(block.x * 10 + 1, block.y * 10 + 10);
-						ctx.lineTo(block.x * 10 + 10, block.y * 10 + 10);
-						ctx.lineTo(block.x * 10 + 10, block.y * 10 + lerp(10, 1, t2));
-						ctx.lineTo(block.x * 10 + lerp(1, 10, t2), block.y * 10 + 1);
-						ctx.fill();
-					} else {
-						t2 = t * 5 - 4;
-						// ctx.fillStyle = thisColor.darker; //shadow edge
-						// ctx.beginPath();
-						// ctx.moveTo(block.x*10 + lerp(1,0,t2) , block.y*10 + lerp(10,9,t2) );
-						// ctx.lineTo(block.x*10 + 1 , block.y*10 + 10);
-						// ctx.lineTo(block.x*10 + 10, block.y*10 + 10);
-						// ctx.lineTo(block.x*10 + 10, block.y*10 + 1 );
-						// ctx.lineTo(block.x*10 + lerp(10,9,t2) , block.y*10 + lerp(1,0,t2)  );
-						// ctx.fill();
-
-						ctx.fillRect(block.x * 10 + lerp(1, 0, t2), block.y * 10 + lerp(1, 0, t2), 9, 9);
-					}
-				}
-			}
-		}
-	}
-}
-
-//draws a player on ctx
-function drawPlayer(ctx, player, timeStamp) {
-	if (player.hasReceivedPosition) {
-		var x, y;
-
-		var pc = getColorForBlockSkinId(player.skinBlock); //player color
-
-		//draw trail
-		if (player.trails.length > 0) {
-			//iterate over each trail
-			for (var trailI = player.trails.length - 1; trailI >= 0; trailI--) {
-				var thisTrail = player.trails[trailI];
-
-				//increase vanish timer
-				var last = trailI == player.trails.length - 1;
-				if (!last || player.isDead) {
-					if (uglyMode) {
-						thisTrail.vanishTimer = 10;
-					} else {
-						const speed = (player.isDead && last) ? 0.006 : 0.02;
-						thisTrail.vanishTimer += deltaTime * speed;
-					}
-					if (!last && (thisTrail.vanishTimer > 10)) {
-						player.trails.splice(trailI, 1);
-					}
-				}
-
-				//if there's no trail, don't draw anything
-				if (thisTrail.trail.length > 0) {
-					var lastPos = last ? player.drawPos : null;
-					if (thisTrail.vanishTimer > 0 && !uglyMode) {
-						ctxApplyCamTransform(tempCtx, true);
-						drawTrailOnCtx(
-							[{
-								ctx: tempCtx,
-								color: pc.darker,
-								offset: 5,
-							}, {
-								ctx: tempCtx,
-								color: pc.brighter,
-								offset: 4,
-							}],
-							thisTrail.trail,
-							lastPos,
-						);
-
-						tempCtx.globalCompositeOperation = "destination-out";
-						drawDiagonalLines(tempCtx, "white", thisTrail.vanishTimer, 10, timeStamp * 0.003);
-
-						ctx.restore();
-						tempCtx.restore();
-						linesCtx.restore();
-
-						ctx.drawImage(tempCanvas, 0, 0);
-						tempCtx.fillStyle = colors.grey.diagonalLines;
-						tempCtx.globalCompositeOperation = "source-in";
-						tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-						linesCtx.drawImage(tempCanvas, 0, 0);
-						ctxApplyCamTransform(ctx);
-						ctxApplyCamTransform(linesCtx);
-					} else if (thisTrail.vanishTimer < 10) {
-						if (uglyMode) {
-							drawTrailOnCtx(
-								[{
-									ctx: ctx,
-									color: pc.darker,
-									offset: 5,
-								}, {
-									ctx: ctx,
-									color: pc.brighter,
-									offset: 4,
-								}],
-								thisTrail.trail,
-								lastPos,
-							);
-						} else {
-							drawTrailOnCtx(
-								[{
-									ctx: ctx,
-									color: pc.darker,
-									offset: 5,
-								}, {
-									ctx: ctx,
-									color: pc.brighter,
-									offset: 4,
-								}, {
-									ctx: linesCtx,
-									color: colors.grey.diagonalLines,
-									offset: 4,
-								}],
-								thisTrail.trail,
-								lastPos,
-							);
-						}
-					}
-				}
-			}
-		}
-
-		//draw player
-		var dp = [player.drawPos[0] * 10 + 4.5, player.drawPos[1] * 10 + 4.5]; //draw position
-		var pr = 6; //player radius
-		var so = 0.3; //shadow offset
-		var gradient = ctx.createRadialGradient(dp[0] - 3, dp[1] - 3, 0, dp[0], dp[1], pr);
-		gradient.addColorStop(0, pc.slightlyBrighter);
-		gradient.addColorStop(1, pc.brighter);
-		linesCtx.fillStyle = "white";
-		if (player.isDead) {
-			player.isDeadTimer += deltaTime * 0.003;
-			ctx.fillStyle = gradient;
-
-			for (var i = 0; i < player.deadAnimParts.length - 1; i++) {
-				var arcStart = player.deadAnimParts[i];
-				var arcEnd = player.deadAnimParts[i + 1];
-				var arcAvg = lerp(arcStart, arcEnd, 0.5);
-				var dir = player.dir * Math.PI / 2 - Math.PI;
-				var distanceModifier = Math.min(
-					Math.abs(dir - arcAvg),
-					Math.abs((dir - Math.PI * 2) - arcAvg),
-					Math.abs((dir + Math.PI * 2) - arcAvg),
-				);
-				var rand = player.deadAnimPartsRandDist[i];
-				var distance = (1 - Math.pow(2, -2 * player.isDeadTimer)) * distanceModifier * 5 * (rand + 1);
-				var pOffset = [Math.cos(arcAvg) * distance, Math.sin(arcAvg) * distance]; //piece offset
-				ctx.globalAlpha = linesCtx.globalAlpha = Math.max(0, 1 - (player.isDeadTimer * 0.2));
-				ctx.beginPath();
-				ctx.arc(dp[0] - so + pOffset[0], dp[1] - so + pOffset[1], pr, arcStart, arcEnd, false);
-				ctx.lineTo(dp[0] - so + pOffset[0], dp[1] - so + pOffset[1]);
-				ctx.fill();
-				if (!uglyMode) {
-					linesCtx.beginPath();
-					linesCtx.arc(dp[0] - so + pOffset[0], dp[1] - so + pOffset[1], pr, arcStart, arcEnd, false);
-					linesCtx.lineTo(dp[0] - so + pOffset[0], dp[1] - so + pOffset[1]);
-					linesCtx.fill();
-				}
-			}
-			ctx.globalAlpha = linesCtx.globalAlpha = 1;
-		} else {
-			ctx.fillStyle = pc.darker;
-			ctx.beginPath();
-			ctx.arc(dp[0] + so, dp[1] + so, pr, 0, 2 * Math.PI, false);
-			ctx.fill();
-			ctx.fillStyle = gradient;
-			ctx.beginPath();
-			ctx.arc(dp[0] - so, dp[1] - so, pr, 0, 2 * Math.PI, false);
-			ctx.fill();
-			if (player.isMyPlayer && localStorage.drawWhiteDot == "true") {
-				ctx.fillStyle = "white";
-				ctx.beginPath();
-				ctx.arc(dp[0] - so, dp[1] - so, 1, 0, 2 * Math.PI, false);
-				ctx.fill();
-			}
-
-			//lines canvas (remove lines)
-			if (!uglyMode) {
-				linesCtx.beginPath();
-				linesCtx.arc(dp[0] + so, dp[1] + so, pr, 0, 2 * Math.PI, false);
-				linesCtx.fill();
-				linesCtx.beginPath();
-				linesCtx.arc(dp[0] - so, dp[1] - so, pr, 0, 2 * Math.PI, false);
-				linesCtx.fill();
-			}
-		}
-		if (player.isMyPlayer && localStorage.drawActualPlayerPos == "true") {
-			ctx.fillStyle = "#FF0000";
-			ctx.beginPath();
-			ctx.arc(player.serverPos[0] * 10 + 5, player.serverPos[1] * 10 + 5, pr, 0, 2 * Math.PI, false);
-			ctx.fill();
-		}
-
-		//draw hitlines
-		if (player.hitLines.length > 0) {
-			for (var hitlineI = player.hitLines.length - 1; hitlineI >= 0; hitlineI--) {
-				var thisHit = player.hitLines[hitlineI];
-
-				//increase vanish timer
-				thisHit.vanishTimer += deltaTime * 0.004;
-				var t = thisHit.vanishTimer;
-				if (t > 4) {
-					player.hitLines.splice(hitlineI, 1);
-				}
-
-				x = thisHit.pos[0] * 10 + 5;
-				y = thisHit.pos[1] * 10 + 5;
-
-				//draw circle
-				if (t < 2) {
-					var radius1 = Math.max(0, ease.out(iLerp(0, 2, t)) * 18);
-					var radius2 = Math.max(0, ease.out(iLerp(0.5, 2, t)) * 18);
-					ctx.fillStyle = pc.brighter;
-					ctx.beginPath();
-					ctx.arc(x, y, radius1, 0, 2 * Math.PI, false);
-					ctx.arc(x, y, radius2, 0, 2 * Math.PI, false);
-					ctx.fill("evenodd");
-
-					if (!uglyMode) {
-						//lines canvas (remove lines)
-						linesCtx.beginPath();
-						linesCtx.arc(x, y, radius1, 0, 2 * Math.PI, false);
-						linesCtx.arc(x, y, radius2, 0, 2 * Math.PI, false);
-						linesCtx.fill("evenodd");
-					}
-				}
-
-				//draw 500+
-				if (thisHit.color !== undefined && player.isMyPlayer) {
-					ctx.save();
-					ctx.font = linesCtx.font = "6px Arial, Helvetica, sans-serif";
-					ctx.fillStyle = thisHit.color.brighter;
-					ctx.shadowColor = thisHit.color.darker;
-					ctx.shadowOffsetX = ctx.shadowOffsetY = 0.4 * MAX_PIXEL_RATIO * zoom * canvasQuality;
-					w = ctx.measureText("+500").width;
-					var hOffset;
-					var opacity;
-					if (t < 0.5) {
-						opacity = iLerp(0, 0.5, t);
-					} else if (t < 3.5) {
-						opacity = 1;
-					} else {
-						opacity = iLerp(4, 3.5, t);
-					}
-					opacity = clamp01(opacity);
-					if (t < 2) {
-						hOffset = ease.out(t / 2) * 20;
-					} else {
-						hOffset = 20;
-					}
-					ctx.globalAlpha = opacity;
-					ctx.fillText("+500", x - w / 2, y - hOffset);
-					ctx.restore();
-				}
-			}
-		}
-
-		//draw honk
-		if (player.honkTimer < player.honkMaxTime) {
-			player.honkTimer += deltaTime * 0.255;
-			ctx.fillStyle = pc.brighter;
-			ctx.globalAlpha = clamp01(iLerp(player.honkMaxTime, 0, player.honkTimer));
-			ctx.beginPath();
-			ctx.arc(
-				player.drawPos[0] * 10 + 4.5 + so,
-				player.drawPos[1] * 10 + 4.5 + so,
-				pr + player.honkTimer * 0.1,
-				0,
-				2 * Math.PI,
-				false,
-			);
-			ctx.fill();
-			ctx.globalAlpha = 1;
-
-			if (!uglyMode) {
-				linesCtx.globalAlpha = clamp01(iLerp(player.honkMaxTime, 0, player.honkTimer));
-				linesCtx.beginPath();
-				linesCtx.arc(
-					player.drawPos[0] * 10 + 4.5 + so,
-					player.drawPos[1] * 10 + 4.5 + so,
-					pr + player.honkTimer * 0.1,
-					0,
-					2 * Math.PI,
-					false,
-				);
-				linesCtx.fill();
-				linesCtx.globalAlpha = 1;
-			}
-		}
-
-		//draw name
-		if (localStorage.hidePlayerNames != "true") {
-			ctx.font = linesCtx.font = USERNAME_SIZE + "px Arial, Helvetica, sans-serif";
-			if (player.name) {
-				var deadAlpha = 1;
-				var myAlpha = 1;
-				if (player.isDead) {
-					deadAlpha = 1 - player.isDeadTimer;
-				}
-				var alpha = Math.min(deadAlpha, myAlpha);
-				if (alpha > 0) {
-					ctx.save();
-					if (!uglyMode) {
-						linesCtx.save();
-					}
-					ctx.globalAlpha = clamp01(alpha);
-					var width = ctx.measureText(player.name).width;
-					width = Math.min(100, width);
-					x = player.drawPos[0] * 10 + 5 - width / 2;
-					y = player.drawPos[1] * 10 - 5;
-
-					ctx.rect(x - 4, y - USERNAME_SIZE * 1.2, width + 8, USERNAME_SIZE * 2);
-					ctx.clip();
-					if (!uglyMode) {
-						linesCtx.rect(x - 4, y - USERNAME_SIZE * 1.2, width + 8, USERNAME_SIZE * 2);
-						linesCtx.clip();
-						linesCtx.fillText(player.name, x, y);
-					}
-
-					ctx.shadowColor = "rgba(0,0,0,0.9)";
-					ctx.shadowBlur = 10;
-					ctx.shadowOffsetX = ctx.shadowOffsetY = 2;
-					ctx.fillStyle = pc.brighter;
-					ctx.fillText(player.name, x, y);
-
-					ctx.shadowColor = pc.darker;
-					ctx.shadowBlur = 0;
-					ctx.shadowOffsetX = ctx.shadowOffsetY = 0.8;
-					ctx.fillText(player.name, x, y);
-
-					ctx.restore();
-					if (!uglyMode) {
-						linesCtx.restore();
-					}
-				}
-			}
-		}
-
-		//draw cool shades
-		if (player.name == "Jesper" && !player.isDead) {
-			ctx.fillStyle = "black";
-			ctx.fillRect(dp[0] - 6.5, dp[1] - 2, 13, 1);
-			ctx.fillRect(dp[0] - 1, dp[1] - 2, 2, 2);
-			ctx.fillRect(dp[0] - 5.5, dp[1] - 2, 5, 3);
-			ctx.fillRect(dp[0] + 0.5, dp[1] - 2, 5, 3);
-		}
-	}
-}
-
-//moves (lerp) drawPos to the actual player position
-function moveDrawPosToPos(player) {
-	// var xDist = Math.abs(player.pos[0] - player.drawPos[0]);
-	// var yDist = Math.abs(player.pos[1] - player.drawPos[1]);
-	let target;
-	if (player.isDead && !player.deathWasCertain) {
-		target = player.uncertainDeathPosition;
-	} else {
-		target = player.pos;
-	}
-	player.drawPos[0] = lerpt(player.drawPos[0], target[0], 0.23);
-	player.drawPos[1] = lerpt(player.drawPos[1], target[1], 0.23);
-}
-
 //move pos along dir with offset
 function movePos(pos, dir, offset) {
 	switch (dir) {
@@ -5855,6 +5262,7 @@ function loop(timeStamp) {
 		totalDeltaTimeFromCap += realDeltaTime;
 	} else {
 		totalDeltaTimeFromCap = 0;
+		//main canvas
 		if(playingAndReady){
 			main_canvas.render(timeStamp,deltaTime);
 		}
@@ -5896,13 +5304,8 @@ function loop(timeStamp) {
 		}
 
 		//skin screen canvas
-		if (skinScreenVisible) {
-			canvasTransformType = canvasTransformTypes.SKIN;
-
-			ctxApplyCamTransform(skinCtx, true);
-
-			drawBlocks(skinCtx, skinScreenBlocks);
-			skinCtx.restore();
+		if (skin_screen.visible) {
+			skin_screen.render();
 		}
 
 		//lastStats
@@ -6273,9 +5676,9 @@ const htmlEscape = str => {
 		.replace(/>/g, "&gt;");
 }
 
-let swearArr = [];
+const swearArr = [];
 simpleRequest("./static/swearList.txt", result => {
-	swearArr = result.split("\n").filter(n => n);
+	swearArr.push(...(result.split("\n").filter(n => n)));
 });
 const swearRepl = "balaboo";
 function filter(str) {
