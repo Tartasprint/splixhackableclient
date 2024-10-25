@@ -2656,6 +2656,14 @@ var lastMousePos = [0, 0], mouseHidePos = [0, 0];
 var joinButton,
 	gamemodeDropDownEl;
 var didConfirmOpenInApp = false;
+let debugging = {
+	frames: 0,
+	time_start: 0,
+	getFPS: () => {
+		return debugging.frames*1000/(Date.now()-debugging.time_start)
+	},
+}
+
 //called by form, connects with transition and error handling
 var isConnectingWithTransition = false;
 
@@ -3421,7 +3429,7 @@ window.addEventListener('load', function () {
 		"change",
 		(e) => localStorage.setItem("lastSelectedEndpoint", e.target.value),
 	);
-
+	debugging.time_start = Date.now();
 	window.requestAnimationFrame(loop);
 
 	var devString = IS_DEV_BUILD ? " (dev build)" : "";
@@ -5210,6 +5218,8 @@ function setLeaderboardVisibility() {
 
 //#region Main loop
 function loop(timeStamp) {
+	debugging.frames += 1;
+	if(timeStamp - debugging.time_start > 1_000) debugging.time_start = timeStamp;
 	var i, lastTrail, t, t2;
 	var realDeltaTime = timeStamp - prevTimeStamp;
 	if (realDeltaTime > lerpedDeltaTime) {
@@ -5389,7 +5399,7 @@ function loop(timeStamp) {
 				const avg = Math.round(game_connection.serverAvgPing);
 				const last = Math.round(game_connection.serverLastPing);
 				const diff = Math.round(game_connection.serverDiffPing);
-				const str = "avg:" + avg + " last:" + last + " diff:" + diff;
+				const str = "avg:" + avg + " last:" + last + " diff:" + diff + " fps:" + Math.round(debugging.getFPS());
 				main_canvas.ctx.font = "14px Arial, Helvetica, sans-serif";
 				main_canvas.ctx.fillStyle = colors.red.brighter;
 				const textWidth = main_canvas.ctx.measureText(str).width;
