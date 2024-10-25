@@ -510,8 +510,8 @@ const intToBytes = (integer, byteCount) => {
  * @returns {string}
  */
 const parseTimeToString = seconds => {
-	const hours = Math.floor(seconds / 3600);
-	const minutes = Math.floor((seconds - (hours * 3600)) / 60);
+	let hours = Math.floor(seconds / 3600);
+	let minutes = Math.floor((seconds - (hours * 3600)) / 60);
 	seconds = seconds - (hours * 3600) - (minutes * 60);
 	if (hours <= 0) {
 		const secondsS = seconds == 1 ? "" : "s";
@@ -522,6 +522,7 @@ const parseTimeToString = seconds => {
 			return minutes + " minute" + minutesS + " and " + seconds + " second" + secondsS;
 		}
 	} else {
+
 		if (hours < 10) hours = "0" + hours;
 		if (minutes < 10) minutes = "0" + minutes;
 		if (seconds < 10) seconds = "0" + seconds;
@@ -684,6 +685,7 @@ class Stats {
 	no1_time = 0;
 }
 
+//#region Canvases
 /**
  * @typedef {{
  * 	ctx: CanvasRenderingContext2D,
@@ -774,7 +776,6 @@ class SplixBaseCanvas {
 			const biggest = Math.max(main_canvas.canvas.width, main_canvas.canvas.height);
 			const zoomEdge = biggest / MAX_ZOOM;
 			const pixelsAvailable = main_canvas.canvas.width * main_canvas.canvas.height;
-			console.log(BLOCKS_ON_SCREEN);
 			const pixelsPerBlock = pixelsAvailable / BLOCKS_ON_SCREEN;
 			const zoomBlocks = Math.sqrt(pixelsPerBlock) / 10;
 			zoom = Math.max(zoomBlocks, zoomEdge);
@@ -1075,13 +1076,39 @@ class SplixCanvas extends SplixBaseCanvas {
 				this.camRotOffset += Math.cos(t * 9) * 0.003 * t3;
 			}
 		}
-		var limit = 80;
-		camPosOffset[0] /= limit;
-		camPosOffset[1] /= limit;
-		camPosOffset[0] = smoothLimit(camPosOffset[0]);
-		camPosOffset[1] = smoothLimit(camPosOffset[1]);
-		camPosOffset[0] *= limit;
-		camPosOffset[1] *= limit;
+		const limit = 80;
+		this.camPosOffset[0] /= limit;
+		this.camPosOffset[1] /= limit;
+		this.camPosOffset[0] = smoothLimit(this.camPosOffset[0]);
+		this.camPosOffset[1] = smoothLimit(this.camPosOffset[1]);
+		this.camPosOffset[0] *= limit;
+		this.camPosOffset[1] *= limit;
+	}
+
+	//shakes the camera but uses a dir (ranges from 0-3) as input
+	doCamShakeDir(dir, amount, doRotate) {
+		if (amount === undefined) {
+			amount = 6;
+		}
+		if (doRotate === undefined) {
+			doRotate = true;
+		}
+		let x = 0, y = 0;
+		switch (dir) {
+			case 0:
+				x = amount;
+				break;
+			case 1:
+				y = amount;
+				break;
+			case 2:
+				x = -amount;
+				break;
+			case 3:
+				y = -amount;
+				break;
+		}
+		this.camShakeForces.push([x, y, 0, !!doRotate]);
 	}
 
 	/**
@@ -1768,7 +1795,6 @@ class SplixLogoCanvas extends SplixBaseCanvas {
 	}
 }
 
-
 class TransitionCanvas extends SplixBaseCanvas {
 	/**@type {HTMLCanvasElement} */
 	canvas;
@@ -2029,6 +2055,205 @@ class TransitionCanvas extends SplixBaseCanvas {
 	}
 }
 
+class LifeCanvas extends SplixBaseCanvas {
+	canvas;
+	ctx;
+	timer = 0;
+	animDir = 0;
+	isLife = true;
+	canvasTransformType = canvasTransformTypes.LIFE;
+	constructor(node,ctx){
+		super();
+		this.canvas=node;
+		this.ctx=ctx;
+	}
+	render(dt, force) {
+		if (this.animDir !== 0 || force) {
+			this.timer += dt * this.animDir * 0.002;
+			if (this.animDir == 1) {
+				if (this.timer > 1) {
+					this.timer = 1;
+					this.afterAnimate();
+				}
+			} else {
+				if (this.timer < 0) {
+					this.timer = 0;
+					this.afterAnimate();
+				}
+			}
+			this.ctxApplyCamTransform(true, true);
+			this.ctx.fillStyle = "rgba(0,0,0,0.3)";
+			this.drawHeart(false, 15.7, 15.7);
+
+			if (this.animDir == 1) {
+				this.ctx.fillStyle = colors.red.darker;
+				this.ctx.translate(30, 30);
+				var s = this.timer;
+				if (s < 0.8) {
+					s = lerp(0, 1.2, ease.in(iLerp(0, 0.8, s)));
+				} else {
+					s = lerp(1.2, 1, ease.in(iLerp(0.8, 1, s)));
+				}
+				var r = (1 - s) * 0.5;
+				this.ctx.rotate(r);
+				this.ctx.scale(s, s);
+				this.ctx.translate(-30, -30);
+				this.drawHeart(false, 15.7, 15.7);
+				this.ctx.fillStyle = colors.red.brighter;
+				this.drawHeart(false, 14.3, 14.3);
+				this.ctx.restore();
+			} else {
+				this.ctx.globalAlpha = this.timer;
+				this.ctx.fillStyle = colors.red.darker;
+				this.drawHeart(true, 15.7, 15.7);
+				this.ctx.fillStyle = colors.red.brighter;
+				this.drawHeart(true, 14.3, 14.3);
+				this.ctx.restore();
+			}
+		}
+	}
+	/**
+	 * Draw a heart.
+	 * @param {boolean} useTimer 
+	 * @param {number} xo x offset
+	 * @param {number} yo y offset
+	 */
+	drawHeart(useTimer, xo, yo) {
+		if (!useTimer || this.timer == 1) {
+			this.ctx.beginPath();
+			this.ctx.moveTo(15 + xo, 12 + yo);
+			this.ctx.bezierCurveTo(15 + xo, 3 + yo, 27 + xo, 3 + yo, 27 + xo, 12 + yo);
+			this.ctx.bezierCurveTo(27 + xo, 18 + yo, 15 + xo, 27 + yo, 15 + xo, 27 + yo);
+			this.ctx.bezierCurveTo(15 + xo, 27 + yo, 3 + xo, 18 + yo, 3 + xo, 12 + yo);
+			this.ctx.bezierCurveTo(3 + xo, 3 + yo, 15 + xo, 3 + yo, 15 + xo, 12 + yo);
+			this.ctx.fill();
+		} else {
+			let txo, tyo; //time x/y offset
+			const t = ease.out(1 - this.timer);
+
+			txo = xo + t * 3;
+			tyo = yo - t * 12;
+			this.ctx.beginPath();
+			this.ctx.moveTo(15 + txo, 16.5 + tyo);
+			this.ctx.lineTo(15 + txo, 12 + tyo);
+			this.ctx.bezierCurveTo(15 + txo, 8.1 + tyo, 17.4 + txo, 5.25 + tyo, 21 + txo, 5.25 + tyo);
+			this.ctx.fill();
+
+			txo = xo + t * 9;
+			tyo = yo - t * 1.5;
+			this.ctx.beginPath();
+			this.ctx.moveTo(15 + txo, 16.5 + tyo);
+			this.ctx.lineTo(21 + txo, 5.25 + tyo);
+			this.ctx.bezierCurveTo(24 + txo, 5.25 + tyo, 27 + txo, 7.5 + tyo, 27 + txo, 12 + tyo);
+			this.ctx.bezierCurveTo(27 + txo, 15.3 + tyo, 23.25 + txo, 19.35 + tyo, 23.1 + txo, 19.5 + tyo);
+			this.ctx.fill();
+
+			txo = xo + t * 6;
+			tyo = yo + t * 9;
+			this.ctx.beginPath();
+			this.ctx.moveTo(15 + txo, 16.5 + tyo);
+			this.ctx.lineTo(23.1 + txo, 19.5 + tyo);
+			this.ctx.bezierCurveTo(23.1 + txo, 19.8 + tyo, 17.55 + txo, 25.11 + tyo, 17.1 + txo, 25.35 + tyo);
+			this.ctx.fill();
+
+			txo = xo - t * 1.5;
+			tyo = yo + t * 9;
+			this.ctx.beginPath();
+			this.ctx.moveTo(15 + txo, 16.5 + tyo);
+			this.ctx.lineTo(17.1 + txo, 25.35 + tyo);
+			this.ctx.lineTo(15 + txo, 27 + tyo);
+			this.ctx.bezierCurveTo(14.91 + txo, 27 + tyo, 10.5 + txo, 23.28 + tyo, 10.5 + txo, 23.16 + tyo);
+			this.ctx.fill();
+
+			txo = xo - t * 12;
+			tyo = yo + t * 1.5;
+			this.ctx.beginPath();
+			this.ctx.moveTo(15 + txo, 16.5 + tyo);
+			this.ctx.lineTo(10.5 + txo, 23.16 + tyo);
+			this.ctx.bezierCurveTo(10.5 + txo, 23.16 + tyo, 3 + txo, 16.65 + tyo, 3 + txo, 12 + tyo);
+			this.ctx.fill();
+
+			txo = xo - t * 3;
+			tyo = yo - t * 6;
+			this.ctx.beginPath();
+			this.ctx.moveTo(15 + txo, 16.5 + tyo);
+			this.ctx.lineTo(3 + txo, 12 + tyo);
+			this.ctx.bezierCurveTo(3 + txo, 3 + tyo, 15 + txo, 3 + tyo, 15 + txo, 12 + tyo);
+			this.ctx.fill();
+		}
+	}
+	afterAnimate(){
+		this.animDir = 0;
+		this.set(this.isLife);
+	}
+	set(isLife) {
+		this.isLife = isLife;
+		if (this.animDir === 0) {
+			if (isLife) {
+				if (this.timer < 1) {
+					this.animDir = 1;
+				}
+			} else {
+				if (this.timer > 0) {
+					this.animDir = -1;
+				}
+			}
+		}
+	}
+}
+//#endregion
+
+class LifeBox {
+	/**@type {LifeCanvas[]} */
+	lives = [];
+	box;
+
+	constructor(){
+		this.box = document.getElementById("lifeBox");
+	}
+
+	clearAllLives() {
+		this.box.innerHTML = "";
+		this.lives = [];
+	}
+	
+	/** 
+	 * @param {number} current
+	 * @param {number} total
+	 */
+	setLives(current, total) {
+		const oldLength = this.lives.length;
+		for (let i = 0; i < total - oldLength; i++) {
+			const el = document.createElement("canvas");
+			el.style.margin = "-15px";
+			const ctx = el.getContext("2d");
+			const life = new LifeCanvas(el,ctx);
+			this.box.appendChild(el);
+			this.lives.push(life);
+			life.render(0, true);
+		}
+		for (let i = oldLength - 1; i >= total; i--) {
+			const life = this.lives[i];
+			this.box.removeChild(life.node);
+			this.lives.splice(i, 1);
+		}
+	
+		for (let i = 0; i < this.lives.length; i++) {
+			const life = this.lives[i];
+			life.set(current > i);
+		}
+	}
+
+	/**
+	 * @param {number} dt
+	 */
+	renderAllLives(dt) {
+		for (const life of this.lives) {
+			life.render(dt);
+		}
+	}
+}
+
 // Some dated code is using these in places like `for(i = 0`.
 // While ideally these variables should all be made local,
 // I'm worried some locations actually rely on them not being local.
@@ -2093,7 +2318,7 @@ var skinCanvas, skinCtx, skinScreen, skinScreenVisible = false, skinScreenBlocks
 /** @type {SplixLogoCanvas} Canvas for splix animated logo */ 
 let title_canvas;
 var currentTouches = [], doRefreshAfterDie = false, pressedKeys = [];
-var camPosOffset = [0, 0], camRotOffset = 0, camShakeForces = [];
+var camRotOffset = 0;
 var honkStartTime = undefined, lastHonkTime = 0, honkSfx = null;
 var skipDeathTransition = false, allowSkipDeathTransition = false, deathTransitionTimeout = null;
 var closeNotification = null, connectionLostNotification = null;
@@ -2444,7 +2669,7 @@ class Player extends EventTarget {
 				this.deadAnimParts = [0];
 				this.isDeadTimer = 0;
 				if (this.isMyPlayer) {
-					doCamShakeDir(this.dir);
+					main_canvas.doCamShakeDir(this.dir);
 				}
 				var prev = 0;
 				while (true) {
@@ -2788,7 +3013,7 @@ window.addEventListener('load', function () {
 	joinButton = document.getElementById("joinButton");
 	qualityText = document.getElementById("qualityText");
 	uglyText = document.getElementById("uglyText");
-	lifeBox = document.getElementById("lifeBox");
+	life_box = new LifeBox();
 
 	window.addEventListener("blur", function (event) {
 		pressedKeys = [];
@@ -3598,7 +3823,7 @@ class GameConnection {
 			}
 			player.addHitLine([x, y], pointsColor, hitSelf);
 			if (player.isMyPlayer && !hitSelf) {
-				doCamShakeDir(player.dir, 10, false);
+				main_canvas.doCamShakeDir(player.dir, 10, false);
 			}
 		}
 		if (data[0] == receiveAction.REFRESH_AFTER_DIE) {
@@ -3628,7 +3853,7 @@ class GameConnection {
 		if (data[0] == receiveAction.TEAM_LIFE_COUNT) {
 			var currentLives = data[1];
 			var totalLives = data[2];
-			setLives(currentLives, totalLives);
+			life_box.setLives(currentLives, totalLives);
 		}
 	}
 	//#endregion
@@ -3691,7 +3916,7 @@ function resetAll() {
 	}
 	currentTopNotifications = [];
 	sendDirQueue = [];
-	clearAllLives();
+	life_box.clearAllLives();
 }
 
 //initiate tutorialBlocks and tutorialPlayers
@@ -3915,177 +4140,7 @@ function updateSkin() {
 }
 
 //lives stuff
-var lives = [];
-var lifeBox;
-function clearAllLives() {
-	lifeBox.innerHTML = "";
-	lives = [];
-}
-
-function setLives(current, total) {
-	var life, i;
-	var oldLength = lives.length;
-	for (i = 0; i < total - oldLength; i++) {
-		var el = document.createElement("canvas");
-		el.style.margin = "-15px";
-		var ctx = el.getContext("2d");
-		life = {
-			node: el,
-			ctx: ctx,
-			timer: 0,
-			animDir: 0,
-			isLife: true,
-			render: function (dt, force) {
-				if (this.animDir !== 0 || force) {
-					this.timer += dt * this.animDir * 0.002;
-					if (this.animDir == 1) {
-						if (this.timer > 1) {
-							this.timer = 1;
-							this.afterAnimate();
-						}
-					} else {
-						if (this.timer < 0) {
-							this.timer = 0;
-							this.afterAnimate();
-						}
-					}
-					canvasTransformType = canvasTransformTypes.LIFE;
-					ctxApplyCamTransform(this.ctx, true, true);
-					this.ctx.fillStyle = "rgba(0,0,0,0.3)";
-					this.drawHeart(false, 15.7, 15.7);
-
-					if (this.animDir == 1) {
-						this.ctx.fillStyle = colors.red.darker;
-						this.ctx.translate(30, 30);
-						var s = this.timer;
-						if (s < 0.8) {
-							s = lerp(0, 1.2, ease.in(iLerp(0, 0.8, s)));
-						} else {
-							s = lerp(1.2, 1, ease.in(iLerp(0.8, 1, s)));
-						}
-						var r = (1 - s) * 0.5;
-						this.ctx.rotate(r);
-						this.ctx.scale(s, s);
-						this.ctx.translate(-30, -30);
-						this.drawHeart(false, 15.7, 15.7);
-						this.ctx.fillStyle = colors.red.brighter;
-						this.drawHeart(false, 14.3, 14.3);
-						this.ctx.restore();
-					} else {
-						this.ctx.globalAlpha = this.timer;
-						this.ctx.fillStyle = colors.red.darker;
-						this.drawHeart(true, 15.7, 15.7);
-						this.ctx.fillStyle = colors.red.brighter;
-						this.drawHeart(true, 14.3, 14.3);
-						this.ctx.restore();
-					}
-				}
-			},
-			drawHeart: function (useTimer, xo, yo) { //xo = xOffset, yo = yOffset
-				if (!useTimer || this.timer == 1) {
-					this.ctx.beginPath();
-					this.ctx.moveTo(15 + xo, 12 + yo);
-					this.ctx.bezierCurveTo(15 + xo, 3 + yo, 27 + xo, 3 + yo, 27 + xo, 12 + yo);
-					this.ctx.bezierCurveTo(27 + xo, 18 + yo, 15 + xo, 27 + yo, 15 + xo, 27 + yo);
-					this.ctx.bezierCurveTo(15 + xo, 27 + yo, 3 + xo, 18 + yo, 3 + xo, 12 + yo);
-					this.ctx.bezierCurveTo(3 + xo, 3 + yo, 15 + xo, 3 + yo, 15 + xo, 12 + yo);
-					this.ctx.fill();
-				} else {
-					var txo, tyo; //time x/y offset
-					var t = ease.out(1 - this.timer);
-
-					txo = xo + t * 3;
-					tyo = yo - t * 12;
-					this.ctx.beginPath();
-					this.ctx.moveTo(15 + txo, 16.5 + tyo);
-					this.ctx.lineTo(15 + txo, 12 + tyo);
-					this.ctx.bezierCurveTo(15 + txo, 8.1 + tyo, 17.4 + txo, 5.25 + tyo, 21 + txo, 5.25 + tyo);
-					this.ctx.fill();
-
-					txo = xo + t * 9;
-					tyo = yo - t * 1.5;
-					this.ctx.beginPath();
-					this.ctx.moveTo(15 + txo, 16.5 + tyo);
-					this.ctx.lineTo(21 + txo, 5.25 + tyo);
-					this.ctx.bezierCurveTo(24 + txo, 5.25 + tyo, 27 + txo, 7.5 + tyo, 27 + txo, 12 + tyo);
-					this.ctx.bezierCurveTo(27 + txo, 15.3 + tyo, 23.25 + txo, 19.35 + tyo, 23.1 + txo, 19.5 + tyo);
-					this.ctx.fill();
-
-					txo = xo + t * 6;
-					tyo = yo + t * 9;
-					this.ctx.beginPath();
-					this.ctx.moveTo(15 + txo, 16.5 + tyo);
-					this.ctx.lineTo(23.1 + txo, 19.5 + tyo);
-					this.ctx.bezierCurveTo(23.1 + txo, 19.8 + tyo, 17.55 + txo, 25.11 + tyo, 17.1 + txo, 25.35 + tyo);
-					this.ctx.fill();
-
-					txo = xo - t * 1.5;
-					tyo = yo + t * 9;
-					this.ctx.beginPath();
-					this.ctx.moveTo(15 + txo, 16.5 + tyo);
-					this.ctx.lineTo(17.1 + txo, 25.35 + tyo);
-					this.ctx.lineTo(15 + txo, 27 + tyo);
-					this.ctx.bezierCurveTo(14.91 + txo, 27 + tyo, 10.5 + txo, 23.28 + tyo, 10.5 + txo, 23.16 + tyo);
-					this.ctx.fill();
-
-					txo = xo - t * 12;
-					tyo = yo + t * 1.5;
-					this.ctx.beginPath();
-					this.ctx.moveTo(15 + txo, 16.5 + tyo);
-					this.ctx.lineTo(10.5 + txo, 23.16 + tyo);
-					this.ctx.bezierCurveTo(10.5 + txo, 23.16 + tyo, 3 + txo, 16.65 + tyo, 3 + txo, 12 + tyo);
-					this.ctx.fill();
-
-					txo = xo - t * 3;
-					tyo = yo - t * 6;
-					this.ctx.beginPath();
-					this.ctx.moveTo(15 + txo, 16.5 + tyo);
-					this.ctx.lineTo(3 + txo, 12 + tyo);
-					this.ctx.bezierCurveTo(3 + txo, 3 + tyo, 15 + txo, 3 + tyo, 15 + txo, 12 + tyo);
-					this.ctx.fill();
-				}
-			},
-			afterAnimate: function () {
-				this.animDir = 0;
-				this.set(this.isLife);
-			},
-			set: function (isLife) {
-				this.isLife = isLife;
-				if (this.animDir === 0) {
-					if (isLife) {
-						if (this.timer < 1) {
-							this.animDir = 1;
-						}
-					} else {
-						if (this.timer > 0) {
-							this.animDir = -1;
-						}
-					}
-				}
-			},
-		};
-		lifeBox.appendChild(el);
-		lives.push(life);
-		life.render(0, true);
-	}
-	for (i = oldLength - 1; i >= total; i--) {
-		life = lives[i];
-		lifeBox.removeChild(life.node);
-		lives.splice(i, 1);
-	}
-
-	for (i = 0; i < lives.length; i++) {
-		life = lives[i];
-		life.set(current > i);
-	}
-}
-
-function renderAllLives(dt) {
-	for (var i = 0; i < lives.length; i++) {
-		var life = lives[i];
-		life.render(dt);
-	}
-}
+let life_box;
 
 //engagement meter
 var engagementIsPlaying = localStorage.engagementIsPlaying == "true";
@@ -4233,11 +4288,13 @@ function checkPatreonQuery() {
 //#endregion
 
 
-//remove blocks that are too far away from the camera and are likely
-//to be seen without an updated state
+/** remove blocks that are too far away from the camera and are likely
+ * to be seen without an updated state
+ * @param {Vec2} pos
+ */
 function removeBlocksOutsideViewport(pos) {
-	for (i = blocks.length - 1; i >= 0; i--) {
-		var block = blocks[i];
+	for (let i = blocks.length - 1; i >= 0; i--) {
+		const block = blocks[i];
 		if (
 			block.x < pos[0] - VIEWPORT_RADIUS * 2 ||
 			block.x > pos[0] + VIEWPORT_RADIUS * 2 ||
@@ -4359,74 +4416,6 @@ function ctxApplyCamTransform(ctx, setSize, dontUseQuality) {
 		ctx.scale(3, 3);
 	}
 }
-
-//shakes the camera
-function doCamShake(x, y, doRotate) {
-	if (doRotate === undefined) {
-		doRotate = true;
-	}
-	camShakeForces.push([x, y, 0, !!doRotate]);
-}
-
-//shakes the camera but uses a dir (ranges from 0-3) as input
-function doCamShakeDir(dir, amount, doRotate) {
-	if (amount === undefined) {
-		amount = 6;
-	}
-	var x = 0, y = 0;
-	switch (dir) {
-		case 0:
-			x = amount;
-			break;
-		case 1:
-			y = amount;
-			break;
-		case 2:
-			x = -amount;
-			break;
-		case 3:
-			y = -amount;
-			break;
-	}
-	doCamShake(x, y, doRotate);
-}
-
-//applyes camShakeForces
-function calcCamOffset() {
-	camPosOffset = [0, 0];
-	camRotOffset = 0;
-	for (var i = camShakeForces.length - 1; i >= 0; i--) {
-		var force = camShakeForces[i];
-		force[2] += deltaTime * 0.003;
-		var t = force[2];
-		var t3 = 0, t2 = 0;
-		if (t < 1) {
-			t2 = ease.out(t);
-			t3 = ease.inout(t);
-		} else if (t < 8) {
-			t2 = ease.inout(iLerp(8, 1, t));
-			t3 = ease.in(iLerp(8, 1, t));
-		} else {
-			camShakeForces.splice(i, 1);
-		}
-		camPosOffset[0] += force[0] * t2;
-		camPosOffset[1] += force[1] * t2;
-
-		camPosOffset[0] += force[0] * Math.cos(t * 8) * 0.04 * t3;
-		camPosOffset[1] += force[1] * Math.cos(t * 7) * 0.04 * t3;
-		if (force[3]) {
-			camRotOffset += Math.cos(t * 9) * 0.003 * t3;
-		}
-	}
-	var limit = 80;
-	camPosOffset[0] /= limit;
-	camPosOffset[1] /= limit;
-	camPosOffset[0] = smoothLimit(camPosOffset[0]);
-	camPosOffset[1] = smoothLimit(camPosOffset[1]);
-	camPosOffset[0] *= limit;
-	camPosOffset[1] *= limit;
-}
-
 
 //updates the stats in the bottom left corner
 function updateStats() {
@@ -5673,7 +5662,7 @@ function loop(timeStamp) {
 		}
 
 		//lives
-		renderAllLives(deltaTime);
+		life_box.renderAllLives(deltaTime);
 
 		//top notification
 		for (var topNotificationI = currentTopNotifications.length - 1; topNotificationI >= 0; topNotificationI--) {
