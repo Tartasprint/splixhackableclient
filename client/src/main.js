@@ -729,11 +729,7 @@ class SplixBaseCanvas {
 	}
 
 	get w(){
-		let w = window.innerWidth;
-		if (this.canvasTransformType == canvasTransformTypes.TUTORIAL) {
-			w = 300;
-		}
-		else if (this.canvasTransformType == canvasTransformTypes.SKIN_BUTTON) {
+		if (this.canvasTransformType == canvasTransformTypes.SKIN_BUTTON) {
 			w = 30;
 		}
 		else if (this.canvasTransformType == canvasTransformTypes.LIFE) {
@@ -745,10 +741,7 @@ class SplixBaseCanvas {
 
 	get h(){
 		let h = window.innerHeight;
-		if (this.canvasTransformType == canvasTransformTypes.TUTORIAL) {
-			h = 300;
-		}
-		else if (this.canvasTransformType == canvasTransformTypes.SKIN_BUTTON) {
+		if (this.canvasTransformType == canvasTransformTypes.SKIN_BUTTON) {
 			h = 30;
 		}
 		else if (this.canvasTransformType == canvasTransformTypes.LIFE) {
@@ -815,6 +808,7 @@ class SplixBaseCamera extends SplixBaseCanvas {
 	linesCtx;
 	/**@type {HTMLCanvasElement} */
 	linesCanvas;
+	camPosPrevFrame = null;
 
 	constructor(canvas){
 		super(canvas);
@@ -1654,9 +1648,6 @@ class SplixCanvas extends SplixBaseCamera {
 }
 
 class MinimapCanvas {
-	/**@type {HTMLCanvasElement} */
-	canvas;
-	ctx;
 	constructor(canvas){
 		if(canvas === undefined){
 			canvas = document.createElement('canvas');
@@ -1814,10 +1805,6 @@ class SplixLogoCanvas extends SplixBaseCanvas {
 }
 
 class TransitionCanvas extends SplixBaseCanvas {
-	/**@type {HTMLCanvasElement} */
-	canvas;
-	/**@type {CanvasRenderingContext2D} */
-	ctx;
 	/**@type {HTMLCanvasElement} */
 	tempCanvas;
 	/**@type {CanvasRenderingContext2D} */
@@ -2072,8 +2059,6 @@ class TransitionCanvas extends SplixBaseCanvas {
 }
 
 class LifeCanvas extends SplixBaseCanvas {
-	canvas;
-	ctx;
 	timer = 0;
 	animDir = 0;
 	isLife = true;
@@ -2215,7 +2200,215 @@ class LifeCanvas extends SplixBaseCanvas {
 		}
 	}
 }
+
+class TutorialCanvas extends SplixBaseCamera {
+	/**@type {canvasTransformTypes} */ // TODO: this should be removed in the end
+	canvasTransformType = canvasTransformTypes.TUTORIAL;
+	/** @type {number} */
+	timer = 0;
+	/** @type {number} */
+	prevTimer = 0;
+	/** @type {Player} */
+	p1 = new Player(1);
+	/** @type {Player} */
+	p2 = new Player(2);
+	text;
+	blocks = [];
+	constructor(canvas,text){
+		super(canvas);
+		this.text = text;
+		this.p1.skinBlock = 8;
+		this.p1.hasReceivedPosition = true;
+		this.p2.skinBlock = 0;
+		this.p2.pos = [-2, 7];
+		this.p2.hasReceivedPosition = true;
+		for (let x = 0; x < 10; x++) {
+			for (let y = 0; y < 10; y++) {
+				const block = getBlock(x, y, this.blocks);
+				let id = 1;
+				if (x >= 1 && x <= 3 && y >= 1 && y <= 3) {
+					id = 10;
+				}
+				block.setBlockId(id, false);
+			}
+		}
+	}
+
+	render(timeStamp,deltaTime){
+		this.timer += deltaTime * GLOBAL_SPEED * 0.7;
+		this.setCanvasSize();
+		if (!uglyMode) {
+			this.setCanvasSize(undefined,this.linesCanvas);
+		}
+
+		//BG
+		this.ctx.fillStyle = colors.grey.BG;
+		this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+		if (!uglyMode) {
+			this.linesCtx.fillStyle = "white";
+			this.linesCtx.fillRect(0, 0, this.linesCanvas.width, this.linesCanvas.height);
+		}
+
+		//cam transforms
+		this.ctxApplyCamTransform(undefined,undefined,this.ctx);
+		if (!uglyMode) {
+			this.ctxApplyCamTransform(undefined,undefined,this.linesCtx);
+		}
+
+		const t = this.timer;
+		this.drawBlocks(this.blocks);
+
+		//p1
+		if (t < 10) {
+			this.p1.pos = [2, 2];
+		} else if (t < 15) {
+			this.p1.pos = [t - 8, 2];
+		} else if (t < 18) {
+			this.p1.pos = [7, t - 13];
+		} else if (t < 23) {
+			this.p1.pos = [25 - t, 5];
+		} else if (t < 26) {
+			this.p1.pos = [2, 28 - t];
+		} else if (t < 30) {
+		} else if (t < 36) {
+			this.p1.pos = [2, t - 28];
+		} else if (t < 39) {
+			this.p1.pos = [t - 34, 8];
+		}
+
+		//p1 trail
+		if (t < 12) {
+		} else if (t < 15) {
+			this.p1.trails = [{
+				trail: [[4, 2]],
+				vanishTimer: 0,
+			}];
+		} else if (t < 18) {
+			this.p1.trails = [{
+				trail: [[4, 2], [7, 2]],
+				vanishTimer: 0,
+			}];
+		} else if (t < 23) {
+			this.p1.trails = [{
+				trail: [[4, 2], [7, 2], [7, 5]],
+				vanishTimer: 0,
+			}];
+		} else if (t < 24) {
+			this.p1.trails = [{
+				trail: [[4, 2], [7, 2], [7, 5], [2, 5]],
+				vanishTimer: 0,
+			}];
+		}
+		if (t > 24 && this.prevTimer < 24) {
+			this.p1.trails = [{
+				trail: [[4, 2], [7, 2], [7, 5], [2, 5], [2, 4]],
+				vanishTimer: 0,
+			}, {
+				trail: [],
+				vanishTimer: 0,
+			}];
+		}
+		if (t < 34) {
+		} else if (t < 36) {
+			this.p1.trails = [{
+				trail: [[2, 6]],
+				vanishTimer: 0,
+			}];
+		} else if (t < 39) {
+			this.p1.trails = [{
+				trail: [[2, 6], [2, 8]],
+				vanishTimer: 0,
+			}];
+		}
+
+		//p2
+		if (t < 34) {
+		} else if (t < 50) {
+			this.p2.pos = [t - 37, 7];
+			this.p2.trails = [{
+				trail: [[-2, 7]],
+				vanishTimer: 0,
+			}];
+		}
+
+		if (t > 25 && this.prevTimer < 25) {
+			fillArea(2, 2, 6, 4, 10, 0, this.blocks);
+		}
+		if (t > 39 && this.prevTimer < 39) {
+			this.p1.die(true);
+			fillArea(1, 1, 7, 5, 1, 0, this.blocks);
+			this.p2.addHitLine([2, 7]);
+		}
+		if (t > 50) {
+			this.timer = this.prevTimer = 0;
+			fillArea(1, 1, 3, 3, 10, 0, this.blocks);
+			this.p1.isDeadTimer = 0;
+			this.p1.isDead = false;
+			this.p1.trails = [];
+			this.p1.pos = [100, 100];
+			this.p2.trails = [{
+				trail: [[-2, 7], [12, 7]],
+				vanishTimer: 0,
+			}, {
+				trail: [],
+				vanishTimer: 0,
+			}];
+			this.p2.pos = this.p2.drawPos = [-2, 7];
+		}
+
+		//tutorial text
+		if (t > 1 && this.prevTimer < 1) {
+			this.text.innerHTML = "Close an area to fill it with your color.";
+		}
+		if (t > 30 && this.prevTimer < 30) {
+			this.text.innerHTML = "Don't get hit by other players.";
+		}
+		const textOpacity = ( clamp01(5 - Math.abs((t - 20) * 0.5))
+						  	+ clamp01(4 - Math.abs((t - 40) * 0.5)));
+		this.text.style.opacity = clamp(textOpacity, 0, 0.9);
+
+		this.p1.moveDrawPosToPos();
+		this.p2.moveDrawPosToPos();
+		this.ctx.globalAlpha = Math.min(1, Math.max(0, t * 0.3 - 1));
+
+		this.drawPlayer(this.p1, timeStamp, deltaTime);
+		this.drawPlayer(this.p2, timeStamp, deltaTime);
+		this.ctx.globalAlpha = 1;
+		this.prevTimer = t;
+
+		//draw lines canvas
+		if (!uglyMode) {
+			this.drawDiagonalLines(this.linesCtx, "white", 5, 10, timeStamp * 0.008);
+		}
+
+		//restore cam transforms
+		this.ctx.restore();
+
+		if (!uglyMode) {
+			this.linesCtx.restore();
+			this.ctx.globalCompositeOperation = "multiply";
+			this.ctx.drawImage(this.linesCanvas, 0, 0);
+			this.ctx.globalCompositeOperation = "source-over";
+		}
+	}
+
+	get h(){
+		return 300;
+	}
+
+	get w(){
+		return 300;
+	}
+}
+
 //#endregion
+
+class SplixState {
+	blocks;
+	players;
+	getPlayer;
+	fillArea;
+}
 
 class LifeBox {
 	/**@type {LifeCanvas[]} */
@@ -2324,7 +2517,8 @@ var showCouldntConnectAfterTransition = false, playingAndReady = false, canRunAd
 /** @type {TransitionCanvas} */
 let transition_canvas;
 var isTransitioning = false;
-var tutorialCanvas, tutCtx, tutorialTimer = 0, tutorialPrevTimer = 0, tutorialBlocks, tutorialPlayers, tutorialText;
+/** @type {TutorialCanvas} */
+let tutorial;
 var touchControlsElem;
 var skinButtonCanvas, skinButtonCtx, skinButtonBlocks = [], skinButtonShadow;
 var skinCanvas, skinCtx, skinScreen, skinScreenVisible = false, skinScreenBlocks;
@@ -3013,9 +3207,10 @@ window.addEventListener('load', function () {
 	tempCanvas = document.createElement("canvas");
 	tempCtx = tempCanvas.getContext("2d");
 	transition_canvas = new TransitionCanvas(document.getElementById("transitionCanvas"));
-	tutorialCanvas = document.getElementById("tutorialCanvas");
-	tutCtx = tutorialCanvas.getContext("2d");
-	tutorialText = document.getElementById("tutorialText");
+	tutorial = new TutorialCanvas(
+		document.getElementById("tutorialCanvas"),
+		document.getElementById("tutorialText")
+	);
 	touchControlsElem = document.getElementById("touchControls");
 	notificationElem = document.getElementById("notification");
 	skinScreen = document.getElementById("skinScreen");
@@ -3099,7 +3294,6 @@ window.addEventListener('load', function () {
 	setQuality();
 	setUglyText();
 
-	initTutorial();
 	initSkinScreen();
 	title_canvas = new SplixLogoCanvas(document.getElementById("logoCanvas"));
 	setLeaderboardVisibility();
@@ -3930,29 +4124,6 @@ function resetAll() {
 	currentTopNotifications = [];
 	sendDirQueue = [];
 	life_box.clearAllLives();
-}
-
-//initiate tutorialBlocks and tutorialPlayers
-function initTutorial() {
-	tutorialBlocks = [];
-	for (var x = 0; x < 10; x++) {
-		for (var y = 0; y < 10; y++) {
-			var block = getBlock(x, y, tutorialBlocks);
-			var id = 1;
-			if (x >= 1 && x <= 3 && y >= 1 && y <= 3) {
-				id = 10;
-			}
-			block.setBlockId(id, false);
-		}
-	}
-	tutorialPlayers = [];
-	var p1 = getPlayer(1, tutorialPlayers);
-	p1.skinBlock = 8;
-	p1.hasReceivedPosition = true;
-	var p2 = getPlayer(2, tutorialPlayers);
-	p2.skinBlock = 0;
-	p2.pos = [-2, 7];
-	p2.hasReceivedPosition = true;
 }
 
 //initiate skinScreenBlocks and buttons
@@ -5692,165 +5863,7 @@ function loop(timeStamp) {
 
 		//tutorial canvas
 		if (beginScreenVisible) {
-			tutorialTimer += deltaTime * GLOBAL_SPEED * 0.7;
-
-			canvasTransformType = canvasTransformTypes.TUTORIAL;
-			ctxCanvasSize(tutCtx);
-			if (!uglyMode) {
-				ctxCanvasSize(linesCtx);
-			}
-
-			//BG
-			tutCtx.fillStyle = colors.grey.BG;
-			tutCtx.fillRect(0, 0, tutorialCanvas.width, tutorialCanvas.height);
-			if (!uglyMode) {
-				linesCtx.fillStyle = "white";
-				linesCtx.fillRect(0, 0, linesCanvas.width, linesCanvas.height);
-			}
-
-			//cam transforms
-			ctxApplyCamTransform(tutCtx);
-			if (!uglyMode) {
-				ctxApplyCamTransform(linesCtx);
-			}
-
-			t = tutorialTimer;
-			drawBlocks(tutCtx, tutorialBlocks);
-			var p1 = getPlayer(1, tutorialPlayers);
-			var p2 = getPlayer(2, tutorialPlayers);
-
-			//p1
-			if (t < 10) {
-				p1.pos = [2, 2];
-			} else if (t < 15) {
-				p1.pos = [t - 8, 2];
-			} else if (t < 18) {
-				p1.pos = [7, t - 13];
-			} else if (t < 23) {
-				p1.pos = [25 - t, 5];
-			} else if (t < 26) {
-				p1.pos = [2, 28 - t];
-			} else if (t < 30) {
-			} else if (t < 36) {
-				p1.pos = [2, t - 28];
-			} else if (t < 39) {
-				p1.pos = [t - 34, 8];
-			}
-
-			//p1 trail
-			if (t < 12) {
-			} else if (t < 15) {
-				p1.trails = [{
-					trail: [[4, 2]],
-					vanishTimer: 0,
-				}];
-			} else if (t < 18) {
-				p1.trails = [{
-					trail: [[4, 2], [7, 2]],
-					vanishTimer: 0,
-				}];
-			} else if (t < 23) {
-				p1.trails = [{
-					trail: [[4, 2], [7, 2], [7, 5]],
-					vanishTimer: 0,
-				}];
-			} else if (t < 24) {
-				p1.trails = [{
-					trail: [[4, 2], [7, 2], [7, 5], [2, 5]],
-					vanishTimer: 0,
-				}];
-			}
-			if (t > 24 && tutorialPrevTimer < 24) {
-				p1.trails = [{
-					trail: [[4, 2], [7, 2], [7, 5], [2, 5], [2, 4]],
-					vanishTimer: 0,
-				}, {
-					trail: [],
-					vanishTimer: 0,
-				}];
-			}
-			if (t < 34) {
-			} else if (t < 36) {
-				p1.trails = [{
-					trail: [[2, 6]],
-					vanishTimer: 0,
-				}];
-			} else if (t < 39) {
-				p1.trails = [{
-					trail: [[2, 6], [2, 8]],
-					vanishTimer: 0,
-				}];
-			}
-
-			//p2
-			if (t < 34) {
-			} else if (t < 50) {
-				p2.pos = [t - 37, 7];
-				p2.trails = [{
-					trail: [[-2, 7]],
-					vanishTimer: 0,
-				}];
-			}
-
-			if (t > 25 && tutorialPrevTimer < 25) {
-				fillArea(2, 2, 6, 4, 10, 0, tutorialBlocks);
-			}
-			if (t > 39 && tutorialPrevTimer < 39) {
-				p1.die(true);
-				fillArea(1, 1, 7, 5, 1, 0, tutorialBlocks);
-				p2.addHitLine([2, 7]);
-			}
-			if (t > 50) {
-				tutorialTimer = tutorialPrevTimer = 0;
-				fillArea(1, 1, 3, 3, 10, 0, tutorialBlocks);
-				p1.isDeadTimer = 0;
-				p1.isDead = false;
-				p1.trails = [];
-				p1.pos = [100, 100];
-				p2.trails = [{
-					trail: [[-2, 7], [12, 7]],
-					vanishTimer: 0,
-				}, {
-					trail: [],
-					vanishTimer: 0,
-				}];
-				p2.pos = p2.drawPos = [-2, 7];
-			}
-
-			//tutorial text
-			if (t > 1 && tutorialPrevTimer < 1) {
-				tutorialText.innerHTML = "Close an area to fill it with your color.";
-			}
-			if (t > 30 && tutorialPrevTimer < 30) {
-				tutorialText.innerHTML = "Don't get hit by other players.";
-			}
-			var textOpacity = clamp01(5 - Math.abs((t - 20) * 0.5));
-			textOpacity += clamp01(4 - Math.abs((t - 40) * 0.5));
-			tutorialText.style.opacity = clamp(textOpacity, 0, 0.9);
-
-			moveDrawPosToPos(p1);
-			moveDrawPosToPos(p2);
-
-			tutCtx.globalAlpha = Math.min(1, Math.max(0, t * 0.3 - 1));
-			drawPlayer(tutCtx, p1, timeStamp);
-			drawPlayer(tutCtx, p2, timeStamp);
-			tutCtx.globalAlpha = 1;
-			tutorialPrevTimer = t;
-
-			//draw lines canvas
-			if (!uglyMode) {
-				drawDiagonalLines(linesCtx, "white", 5, 10, timeStamp * 0.008);
-			}
-
-			//restore cam transforms
-			tutCtx.restore();
-
-			if (!uglyMode) {
-				linesCtx.restore();
-				tutCtx.globalCompositeOperation = "multiply";
-				tutCtx.drawImage(linesCanvas, 0, 0);
-				tutCtx.globalCompositeOperation = "source-over";
-			}
+			tutorial.render(timeStamp,deltaTime);
 		}
 
 		//skin button
