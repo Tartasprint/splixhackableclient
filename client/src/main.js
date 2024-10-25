@@ -729,6 +729,7 @@ class SplixBaseCanvas {
 	}
 
 	get w(){
+		let w = window.innerHeight;
 		if (this.canvasTransformType == canvasTransformTypes.SKIN_BUTTON) {
 			w = 30;
 		}
@@ -773,10 +774,10 @@ class SplixBaseCanvas {
 		}
 		if (this.canvasTransformType == canvasTransformTypes.MAIN || this.canvasTransformType == canvasTransformTypes.SKIN) {
 			const isMain = this.canvasTransformType == canvasTransformTypes.MAIN;
-			ctx.translate(main_canvas.canvas.width / 2, main_canvas.canvas.height / 2);
-			const biggest = Math.max(main_canvas.canvas.width, main_canvas.canvas.height);
+			ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
+			const biggest = Math.max(this.canvas.width, this.canvas.height);
 			const zoomEdge = biggest / MAX_ZOOM;
-			const pixelsAvailable = main_canvas.canvas.width * main_canvas.canvas.height;
+			const pixelsAvailable = this.canvas.width * this.canvas.height;
 			const pixelsPerBlock = pixelsAvailable / BLOCKS_ON_SCREEN;
 			const zoomBlocks = Math.sqrt(pixelsPerBlock) / 10;
 			zoom = Math.max(zoomBlocks, zoomEdge);
@@ -2401,6 +2402,54 @@ class TutorialCanvas extends SplixBaseCamera {
 	}
 }
 
+class SkinButtonCanvas extends SplixBaseCamera {
+	canvasTransformType = canvasTransformTypes.SKIN_BUTTON;
+	blocks = [];
+	shadow;
+	constructor(canvas,shadow){
+		super(canvas);
+		let currentColor = localStorage.getItem("skinColor");
+		if (currentColor === null) {
+			currentColor = 0;
+		} else {
+			currentColor = parseInt(currentColor);
+		}
+		this.shadow = shadow;
+		this.canvas.addEventListener('click', () => {
+			if (!game_connection && !isTransitioning && !playingAndReady) {
+				transition_canvas.doTransition("", false, openSkinScreen);
+			}
+		});
+		const block = getBlock(0, 0, this.blocks);
+		block.setBlockId(currentColor + 1, false);
+		this.canvas.addEventListener('mouseover', () => {
+			// TODO Live update skin color without needing to mouseover (listen to storage events)
+			// this currently is just for animation purposes
+			let currentColor = localStorage.getItem("skinColor");
+			if (currentColor === null) {
+				currentColor = 0;
+			}
+			currentColor = parseInt(currentColor);
+			if (currentColor > 0) {
+				this.blocks[0].setBlockId(currentColor + 1 + SKIN_BLOCK_COUNT, false);
+			}
+		});
+		this.canvas.addEventListener('mouseout',() => {
+			let currentColor = localStorage.getItem("skinColor");
+			if (currentColor === null) {
+				currentColor = 0;
+			}
+			this.blocks[0].setBlockId(parseInt(currentColor) + 1, false);
+		});
+	}
+	
+	render(){
+		this.ctxApplyCamTransform(true,true);
+		this.drawBlocks(this.blocks);
+		this.ctx.restore();
+	}
+
+}
 //#endregion
 
 class SplixState {
@@ -2484,7 +2533,6 @@ var lastClientsideMoves = [],
 	isRequestingMyTrail = false,
 	skipTrailRequestResponse = false;
 var mapSize = 2000, closedBecauseOfDeath = false, beginScreenVisible = true, wsOnOpenTime;
-var minimapCanvas;
 /**@type {MinimapCanvas} */
 let minimap_canvas;
 var canvasQuality = 1,
@@ -2520,7 +2568,8 @@ var isTransitioning = false;
 /** @type {TutorialCanvas} */
 let tutorial;
 var touchControlsElem;
-var skinButtonCanvas, skinButtonCtx, skinButtonBlocks = [], skinButtonShadow;
+/** @type {SkinButtonCanvas} */
+let skin_button;
 var skinCanvas, skinCtx, skinScreen, skinScreenVisible = false, skinScreenBlocks;
 /** @type {SplixLogoCanvas} Canvas for splix animated logo */ 
 let title_canvas;
@@ -4128,27 +4177,23 @@ function resetAll() {
 
 //initiate skinScreenBlocks and buttons
 function initSkinScreen() {
-	skinButtonCanvas = document.getElementById("skinButton");
-	skinButtonShadow = document.getElementById("skinButtonShadow");
-	skinButtonCtx = skinButtonCanvas.getContext("2d");
-	skinButtonCanvas.onclick = function () {
-		if (!game_connection && !isTransitioning && !playingAndReady) {
-			transition_canvas.doTransition("", false, openSkinScreen);
-		}
-	};
+	skin_button = new SkinButtonCanvas(
+		document.getElementById("skinButton"),
+		document.getElementById("skinButtonShadow"),
+	);
 
-	var currentColor = localStorage.getItem("skinColor");
+	let currentColor = localStorage.getItem("skinColor");
 	if (currentColor === null) {
 		currentColor = 0;
 	}
 	currentColor = parseInt(currentColor);
 
-	var currentPattern = localStorage.getItem("skinPattern");
+	let currentPattern = localStorage.getItem("skinPattern");
 	if (currentPattern === null) {
 		currentPattern = 0;
 	}
 	currentPattern = parseInt(currentPattern);
-
+	
 	skinScreenBlocks = [];
 	fillArea(0, 0, VIEWPORT_RADIUS * 2, VIEWPORT_RADIUS * 2, currentColor + 1, currentPattern, skinScreenBlocks);
 
@@ -4166,27 +4211,6 @@ function initSkinScreen() {
 	};
 	document.getElementById("skinSave").onclick = function () {
 		transition_canvas.doTransition("", false, showBeginHideSkin);
-	};
-
-	var block = getBlock(0, 0, skinButtonBlocks);
-	block.setBlockId(currentColor + 1, false);
-
-	skinButtonCanvas.onmouseover = function () {
-		var currentColor = localStorage.getItem("skinColor");
-		if (currentColor === null) {
-			currentColor = 0;
-		}
-		currentColor = parseInt(currentColor);
-		if (currentColor > 0) {
-			skinButtonBlocks[0].setBlockId(currentColor + 1 + SKIN_BLOCK_COUNT, false);
-		}
-	};
-	skinButtonCanvas.onmouseout = function () {
-		var currentColor = localStorage.getItem("skinColor");
-		if (currentColor === null) {
-			currentColor = 0;
-		}
-		skinButtonBlocks[0].setBlockId(parseInt(currentColor) + 1, false);
 	};
 }
 
@@ -4320,7 +4344,7 @@ function updateSkin() {
 		parseInt(localStorage.skinPattern),
 		skinScreenBlocks,
 	);
-	skinButtonBlocks[0].setBlockId(blockId);
+	skin_button.blocks[0].setBlockId(blockId);
 }
 
 //lives stuff
@@ -5868,12 +5892,7 @@ function loop(timeStamp) {
 
 		//skin button
 		if (beginScreenVisible) {
-			canvasTransformType = canvasTransformTypes.SKIN_BUTTON;
-
-			ctxApplyCamTransform(skinButtonCtx, true, true);
-
-			drawBlocks(skinButtonCtx, skinButtonBlocks);
-			skinButtonCtx.restore();
+			skin_button.render();
 		}
 
 		//skin screen canvas
