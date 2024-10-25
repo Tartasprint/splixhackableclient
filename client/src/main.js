@@ -701,7 +701,15 @@ class SplixBaseCanvas {
 	ctx;
 	/**@type {canvasTransformTypes} */ // TODO: this should be removed in the end
 	canvasTransformType;
-	constructor(){}
+	constructor(canvas){
+		if(canvas === undefined){
+			canvas = document.createElement('canvas');
+			console.warn("The canvas is not attached. See trace :");
+			console.trace();
+		}
+		this.canvas = canvas;
+		this.ctx = this.canvas.getContext("2d");
+	}
 
 	/**
 	 * sets the with/height of a full screen canvas, takes retina displays into account
@@ -796,16 +804,9 @@ class SplixBaseCanvas {
 	}
 }
 
-/**
- * @typedef {[number, number]} Vec2
- */
 
-class SplixCanvas extends SplixBaseCanvas {
-	//// CANVASES
-	/**@type {HTMLCanvasElement} */
-	canvas;
-	/**@type {CanvasRenderingContext2D} */
-	ctx;
+class SplixBaseCamera extends SplixBaseCanvas {
+
 	/**@type {canvasTransformTypes} */ // TODO: this should be removed in the end
 	canvasTransformType = canvasTransformTypes.MAIN;
 	/**@type {CanvasRenderingContext2D} */
@@ -815,302 +816,12 @@ class SplixCanvas extends SplixBaseCanvas {
 	/**@type {HTMLCanvasElement} */
 	linesCanvas;
 
-	//// DATA
-	/**@type {Vec2} */
-	camPos = [0,0];
-	camPosSet = false;
-	/**@type {Vec2} */
-	camPosPrevFrame = [0,0];
-	/**@type {[number,number,number][]} */
-	camShakeForces = [];
-	/**@type {Vec2} */
-	camPosOffset = [0,0];
-	/**@type {Vec2} */
-	camRotOffset = 0;
-	myNameAlphaTimer = 0;
-	constructor(){
-		super();
-		this.canvas = document.getElementById("mainCanvas");
-		this.ctx = this.canvas.getContext("2d");
+	constructor(canvas){
+		super(canvas);
 		this.linesCanvas = document.createElement('canvas');
 		this.linesCtx = this.linesCanvas.getContext('2d'); // TODO If possible, remove these contexts
 		this.tempCtx = document.createElement('canvas').getContext('2d'); // TODO use OffscreenCanvas if possible
 	}
-
-	show(){
-		this.canvas.style.display = null;
-		this.myNameAlphaTimer = 0;
-	}
-
-	hide(){
-		this.canvas.style.display = 'none';
-	}
-
-	reset(){
-		this.camPosSet = false;
-		this.camShakeForces = [];
-	}
-
-	get w (){ return window.innerWidth }
-	get h (){ return window.innerHeight }
-
-	/**
-	 * Render the main canvas.
-	 * @param {number} deltaTime 
-	 */
-	render(timeStamp,deltaTime){
-		const ctx = this.ctx;
-		this.setCanvasSize();
-		if (!uglyMode) {
-			this.setCanvasSize(false,this.linesCanvas);
-		}
-
-		//BG
-		ctx.fillStyle = colors.grey.BG;
-		ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-		if (!uglyMode) {
-			this.linesCtx.fillStyle = "white";
-			this.linesCtx.fillRect(0, 0, this.linesCanvas.width, this.linesCanvas.height);
-		}
-
-		//cam transforms
-		this.camPosPrevFrame = [this.camPos[0], this.camPos[1]];
-		this.calcCamOffset();
-		this.ctxApplyCamTransform(false,false,ctx);
-		if (!uglyMode) {
-			this.ctxApplyCamTransform(false,false,this.linesCtx);
-		}
-
-		//draw blocks
-		this.drawBlocks(blocks, true);
-
-		//players
-		let offset = deltaTime * GLOBAL_SPEED;
-		for (const player of players) {
-			//move player
-			if (!player.isDead || !player.deathWasCertain) {
-				if (player.moveRelativeToServerPosNextFrame) {
-					offset = (Date.now() - player.lastServerPosSentTime) * GLOBAL_SPEED;
-				}
-				if (player.isMyPlayer) {
-					movePos(player.serverPos, player.serverDir, offset);
-					if (player.serverDir == player.dir) {
-						let clientServerDist = 0;
-						if (localStorage.dontSlowPlayersDown != "true") {
-							if (player.dir === 0 || player.dir == 2) { //left or right
-								if (player.pos.y == player.serverPos.y) {
-									if (player.dir === 0) { //right
-										clientServerDist = player.pos[0] - player.serverPos[0];
-									} else { //left
-										clientServerDist = player.serverPos[0] - player.pos[0];
-									}
-								}
-							} else { //up or down
-								if (player.pos.x == player.serverPos.x) {
-									if (player.dir == 1) { //down
-										clientServerDist = player.pos[1] - player.serverPos[1];
-									} else { //up
-										clientServerDist = player.serverPos[1] - player.pos[1];
-									}
-								}
-							}
-						}
-						clientServerDist = Math.max(0, clientServerDist);
-						offset *= lerp(0.5, 1, iLerp(5, 0, clientServerDist));
-					}
-				}
-				movePos(player.pos, player.dir, offset);
-			}
-			player.moveRelativeToServerPosNextFrame = false;
-
-			player.moveDrawPosToPos();
-
-			//test if player should be dead
-			let playerShouldBeDead = false;
-			if (
-				player.drawPos[0] <= 0 || player.drawPos[1] <= 0 || player.drawPos[0] >= mapSize - 1 ||
-				player.drawPos[1] >= mapSize - 1
-			) {
-				playerShouldBeDead = true;
-			} else if (player.trails.length > 0) {
-				const lastTrail = player.trails[player.trails.length - 1].trail;
-				const roundedPos = [Math.round(player.drawPos[0]), Math.round(player.drawPos[1])];
-				if (
-					Math.abs(roundedPos[0] - player.drawPos[0]) < 0.2 &&
-					Math.abs(roundedPos[1] - player.drawPos[1]) < 0.2
-				) {
-					//only die if player.pos is close to the center of a block
-					let touchingPrevTrail = true;
-					for (let i = lastTrail.length - 3; i >= 0; i--) {
-						const pos1 = [Math.round(lastTrail[i][0]), Math.round(lastTrail[i][1])];
-						const pos2 = [Math.round(lastTrail[i + 1][0]), Math.round(lastTrail[i + 1][1])];
-						const twoPos = orderTwoPos(pos1, pos2);
-						if (
-							roundedPos[0] >= twoPos[0][0] &&
-							roundedPos[0] <= twoPos[1][0] &&
-							roundedPos[1] >= twoPos[0][1] &&
-							roundedPos[1] <= twoPos[1][1]
-						) {
-							if (!touchingPrevTrail) {
-								playerShouldBeDead = true;
-							}
-							touchingPrevTrail = true;
-						} else {
-							touchingPrevTrail = false;
-						}
-					}
-				}
-			}
-			if (playerShouldBeDead) {
-				if (!player.isDead) {
-					player.die();
-				}
-			} else {
-				player.didUncertainDeathLastTick = false;
-			}
-
-			//test if player shouldn't be dead after all
-			if (player.isDead && !player.deathWasCertain && player.isDeadTimer > 1.5) {
-				player.isDead = false;
-				if (player.trails.length > 0) {
-					const lastTrail = player.trails[player.trails.length - 1];
-					lastTrail.vanishTimer = 0;
-				}
-			}
-
-			//if my player
-			if (player.isMyPlayer) {
-				myPos = [player.pos[0], player.pos[1]];
-				miniMapPlayer.style.left = (myPos[0] / mapSize * 160 + 1.5) + "px";
-				miniMapPlayer.style.top = (myPos[1] / mapSize * 160 + 1.5) + "px";
-				if (this.camPosSet) {
-					this.camPos[0] = lerpt(this.camPos[0], player.pos[0], 0.03);
-					this.camPos[1] = lerpt(this.camPos[1], player.pos[1], 0.03);
-				} else {
-					this.camPos = [player.pos[0], player.pos[1]];
-					this.camPosSet = true;
-				}
-
-				if (myNextDir != player.dir) {
-					// console.log("myNextDir != player.dir (",myNextDir,"!=",player.dir,")");
-					const horizontal = player.dir === 0 || player.dir == 2;
-					//only change when currently traveling horizontally and new dir is not horizontal
-					//or when new dir is horizontal but not currently traveling horizontally
-					if (changeDirAtIsHorizontal != horizontal) {
-						let changeDirNow = false;
-						const currentCoord = player.pos[horizontal ? 0 : 1];
-						if (player.dir === 0 || player.dir == 1) { //right & down
-							if (changeDirAt < currentCoord) {
-								changeDirNow = true;
-							}
-						} else {
-							if (changeDirAt > currentCoord) {
-								changeDirNow = true;
-							}
-						}
-						if (changeDirNow) {
-							const newPos = [player.pos[0], player.pos[1]];
-							const tooFarTraveled = Math.abs(changeDirAt - currentCoord);
-							newPos[horizontal ? 0 : 1] = changeDirAt;
-							changeMyDir(myNextDir, newPos);
-							movePos(player.pos, player.dir, tooFarTraveled);
-						}
-					}
-				}
-			}
-
-			this.drawPlayer(player, timeStamp, deltaTime);
-		}
-
-		//change dir queue
-		if (sendDirQueue.length > 0) {
-			var thisDir = sendDirQueue[0];
-			if (
-				Date.now() - thisDir.addTime > 1.2 / GLOBAL_SPEED || // older than '1.2 blocks travel time'
-				sendDir(thisDir.dir, true) // senddir call was successful
-			) {
-				sendDirQueue.shift(); //remove item
-			}
-		}
-
-		if (!uglyMode) {
-			this.drawDiagonalLines(this.linesCtx, "white", 5, 10, timeStamp * 0.008);
-		}
-
-		//restore cam transforms
-		ctx.restore();
-
-		if (!uglyMode) {
-			this.linesCtx.restore();
-			ctx.globalCompositeOperation = "multiply";
-			// ctx.clearRect(0,0,mainCanvas.width, mainCanvas.height)
-			ctx.drawImage(this.linesCanvas, 0, 0);
-			ctx.globalCompositeOperation = "source-over";
-		}
-	}
-	
-	/** applies camShakeForces */
-	calcCamOffset(deltaTime){
-		this.camPosOffset = [0, 0];
-		this.camRotOffset = 0;
-		for (let i = this.camShakeForces.length - 1; i >= 0; i--) {
-			const force = this.camShakeForces[i];
-			force[2] += deltaTime * 0.003;
-			const t = force[2];
-			let t3 = 0, t2 = 0;
-			if (t < 1) {
-				t2 = ease.out(t);
-				t3 = ease.inout(t);
-			} else if (t < 8) {
-				t2 = ease.inout(iLerp(8, 1, t));
-				t3 = ease.in(iLerp(8, 1, t));
-			} else {
-				this.camShakeForces.splice(i, 1);
-			}
-			this.camPosOffset[0] += force[0] * t2;
-			this.camPosOffset[1] += force[1] * t2;
-
-			this.camPosOffset[0] += force[0] * Math.cos(t * 8) * 0.04 * t3;
-			this.camPosOffset[1] += force[1] * Math.cos(t * 7) * 0.04 * t3;
-			if (force[3]) {
-				this.camRotOffset += Math.cos(t * 9) * 0.003 * t3;
-			}
-		}
-		const limit = 80;
-		this.camPosOffset[0] /= limit;
-		this.camPosOffset[1] /= limit;
-		this.camPosOffset[0] = smoothLimit(this.camPosOffset[0]);
-		this.camPosOffset[1] = smoothLimit(this.camPosOffset[1]);
-		this.camPosOffset[0] *= limit;
-		this.camPosOffset[1] *= limit;
-	}
-
-	//shakes the camera but uses a dir (ranges from 0-3) as input
-	doCamShakeDir(dir, amount, doRotate) {
-		if (amount === undefined) {
-			amount = 6;
-		}
-		if (doRotate === undefined) {
-			doRotate = true;
-		}
-		let x = 0, y = 0;
-		switch (dir) {
-			case 0:
-				x = amount;
-				break;
-			case 1:
-				y = amount;
-				break;
-			case 2:
-				x = -amount;
-				break;
-			case 3:
-				y = -amount;
-				break;
-		}
-		this.camShakeForces.push([x, y, 0, !!doRotate]);
-	}
-
 	/**
 	 * draws diagonal lines on a canvas, can be used as mask and stuff like that
 	 * @param {CanvasRenderingContext2D} ctx 
@@ -1141,9 +852,10 @@ class SplixCanvas extends SplixBaseCanvas {
 			}
 		}
 	}
-	/** draws blocks on ctx */
+	/** draws blocks on ctx
+	 * Uses linesCtx
+	 */
 	drawBlocks(blocks, checkViewport) {
-		var t2;
 		for (const block of blocks) {
 			if (
 				checkViewport &&
@@ -1282,7 +994,7 @@ class SplixCanvas extends SplixBaseCanvas {
 							this.ctx.lineTo(block.x * 10 + lerp(1, 10, t2), block.y * 10 + 1);
 							this.ctx.fill();
 						} else {
-							t2 = t * 5 - 4;
+							const t2 = t * 5 - 4;
 							// ctx.fillStyle = thisColor.darker; //shadow edge
 							// ctx.beginPath();
 							// ctx.moveTo(block.x*10 + lerp(1,0,t2) , block.y*10 + lerp(10,9,t2) );
@@ -1300,7 +1012,14 @@ class SplixCanvas extends SplixBaseCanvas {
 		}
 	}
 
-	//draws a player on ctx
+	/**
+	 * Draws a player.
+	 * 
+	 * Requires tempCtx and lineCtx
+	 * @param {Player} player 
+	 * @param {number} timeStamp 
+	 * @param {number} deltaTime 
+	 */
 	drawPlayer(player, timeStamp, deltaTime) {
 		const ctx = this.ctx;
 		if (player.hasReceivedPosition) {
@@ -1634,12 +1353,315 @@ class SplixCanvas extends SplixBaseCanvas {
 	}
 }
 
+/**
+ * @typedef {[number, number]} Vec2
+ */
+
+class SplixCanvas extends SplixBaseCamera {
+	/**@type {canvasTransformTypes} */ // TODO: this should be removed in the end
+	canvasTransformType = canvasTransformTypes.MAIN;
+
+	//// DATA
+	/**@type {Vec2} */
+	camPos = [0,0];
+	camPosSet = false;
+	/**@type {Vec2} */
+	camPosPrevFrame = [0,0];
+	/**@type {[number,number,number][]} */
+	camShakeForces = [];
+	/**@type {Vec2} */
+	camPosOffset = [0,0];
+	/**@type {Vec2} */
+	camRotOffset = 0;
+	myNameAlphaTimer = 0;
+	constructor(canvas){
+		super(canvas);
+	}
+
+	show(){
+		this.canvas.style.display = null;
+		this.myNameAlphaTimer = 0;
+	}
+
+	hide(){
+		this.canvas.style.display = 'none';
+	}
+
+	reset(){
+		this.camPosSet = false;
+		this.camShakeForces = [];
+	}
+
+	get w (){ return window.innerWidth }
+	get h (){ return window.innerHeight }
+
+	/**
+	 * Render the main canvas.
+	 * @param {number} deltaTime 
+	 */
+	render(timeStamp,deltaTime){
+		const ctx = this.ctx;
+		this.setCanvasSize();
+		if (!uglyMode) {
+			this.setCanvasSize(false,this.linesCanvas);
+		}
+
+		//BG
+		ctx.fillStyle = colors.grey.BG;
+		ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+		if (!uglyMode) {
+			this.linesCtx.fillStyle = "white";
+			this.linesCtx.fillRect(0, 0, this.linesCanvas.width, this.linesCanvas.height);
+		}
+
+		//cam transforms
+		this.camPosPrevFrame = [this.camPos[0], this.camPos[1]];
+		this.calcCamOffset();
+		this.ctxApplyCamTransform(false,false,ctx);
+		if (!uglyMode) {
+			this.ctxApplyCamTransform(false,false,this.linesCtx);
+		}
+
+		//draw blocks
+		this.drawBlocks(blocks, true);
+
+		//players
+		let offset = deltaTime * GLOBAL_SPEED;
+		for (const player of players) {
+			//move player
+			if (!player.isDead || !player.deathWasCertain) {
+				if (player.moveRelativeToServerPosNextFrame) {
+					offset = (Date.now() - player.lastServerPosSentTime) * GLOBAL_SPEED;
+				}
+				if (player.isMyPlayer) {
+					movePos(player.serverPos, player.serverDir, offset);
+					if (player.serverDir == player.dir) {
+						let clientServerDist = 0;
+						if (localStorage.dontSlowPlayersDown != "true") {
+							if (player.dir === 0 || player.dir == 2) { //left or right
+								if (player.pos.y == player.serverPos.y) {
+									if (player.dir === 0) { //right
+										clientServerDist = player.pos[0] - player.serverPos[0];
+									} else { //left
+										clientServerDist = player.serverPos[0] - player.pos[0];
+									}
+								}
+							} else { //up or down
+								if (player.pos.x == player.serverPos.x) {
+									if (player.dir == 1) { //down
+										clientServerDist = player.pos[1] - player.serverPos[1];
+									} else { //up
+										clientServerDist = player.serverPos[1] - player.pos[1];
+									}
+								}
+							}
+						}
+						clientServerDist = Math.max(0, clientServerDist);
+						offset *= lerp(0.5, 1, iLerp(5, 0, clientServerDist));
+					}
+				}
+				movePos(player.pos, player.dir, offset);
+			}
+			player.moveRelativeToServerPosNextFrame = false;
+
+			player.moveDrawPosToPos();
+
+			//test if player should be dead
+			let playerShouldBeDead = false;
+			if (
+				player.drawPos[0] <= 0 || player.drawPos[1] <= 0 || player.drawPos[0] >= mapSize - 1 ||
+				player.drawPos[1] >= mapSize - 1
+			) {
+				playerShouldBeDead = true;
+			} else if (player.trails.length > 0) {
+				const lastTrail = player.trails[player.trails.length - 1].trail;
+				const roundedPos = [Math.round(player.drawPos[0]), Math.round(player.drawPos[1])];
+				if (
+					Math.abs(roundedPos[0] - player.drawPos[0]) < 0.2 &&
+					Math.abs(roundedPos[1] - player.drawPos[1]) < 0.2
+				) {
+					//only die if player.pos is close to the center of a block
+					let touchingPrevTrail = true;
+					for (let i = lastTrail.length - 3; i >= 0; i--) {
+						const pos1 = [Math.round(lastTrail[i][0]), Math.round(lastTrail[i][1])];
+						const pos2 = [Math.round(lastTrail[i + 1][0]), Math.round(lastTrail[i + 1][1])];
+						const twoPos = orderTwoPos(pos1, pos2);
+						if (
+							roundedPos[0] >= twoPos[0][0] &&
+							roundedPos[0] <= twoPos[1][0] &&
+							roundedPos[1] >= twoPos[0][1] &&
+							roundedPos[1] <= twoPos[1][1]
+						) {
+							if (!touchingPrevTrail) {
+								playerShouldBeDead = true;
+							}
+							touchingPrevTrail = true;
+						} else {
+							touchingPrevTrail = false;
+						}
+					}
+				}
+			}
+			if (playerShouldBeDead) {
+				if (!player.isDead) {
+					player.die();
+				}
+			} else {
+				player.didUncertainDeathLastTick = false;
+			}
+
+			//test if player shouldn't be dead after all
+			if (player.isDead && !player.deathWasCertain && player.isDeadTimer > 1.5) {
+				player.isDead = false;
+				if (player.trails.length > 0) {
+					const lastTrail = player.trails[player.trails.length - 1];
+					lastTrail.vanishTimer = 0;
+				}
+			}
+
+			//if my player
+			if (player.isMyPlayer) {
+				myPos = [player.pos[0], player.pos[1]];
+				miniMapPlayer.style.left = (myPos[0] / mapSize * 160 + 1.5) + "px";
+				miniMapPlayer.style.top = (myPos[1] / mapSize * 160 + 1.5) + "px";
+				if (this.camPosSet) {
+					this.camPos[0] = lerpt(this.camPos[0], player.pos[0], 0.03);
+					this.camPos[1] = lerpt(this.camPos[1], player.pos[1], 0.03);
+				} else {
+					this.camPos = [player.pos[0], player.pos[1]];
+					this.camPosSet = true;
+				}
+
+				if (myNextDir != player.dir) {
+					// console.log("myNextDir != player.dir (",myNextDir,"!=",player.dir,")");
+					const horizontal = player.dir === 0 || player.dir == 2;
+					//only change when currently traveling horizontally and new dir is not horizontal
+					//or when new dir is horizontal but not currently traveling horizontally
+					if (changeDirAtIsHorizontal != horizontal) {
+						let changeDirNow = false;
+						const currentCoord = player.pos[horizontal ? 0 : 1];
+						if (player.dir === 0 || player.dir == 1) { //right & down
+							if (changeDirAt < currentCoord) {
+								changeDirNow = true;
+							}
+						} else {
+							if (changeDirAt > currentCoord) {
+								changeDirNow = true;
+							}
+						}
+						if (changeDirNow) {
+							const newPos = [player.pos[0], player.pos[1]];
+							const tooFarTraveled = Math.abs(changeDirAt - currentCoord);
+							newPos[horizontal ? 0 : 1] = changeDirAt;
+							changeMyDir(myNextDir, newPos);
+							movePos(player.pos, player.dir, tooFarTraveled);
+						}
+					}
+				}
+			}
+
+			this.drawPlayer(player, timeStamp, deltaTime);
+		}
+
+		//change dir queue
+		if (sendDirQueue.length > 0) {
+			var thisDir = sendDirQueue[0];
+			if (
+				Date.now() - thisDir.addTime > 1.2 / GLOBAL_SPEED || // older than '1.2 blocks travel time'
+				sendDir(thisDir.dir, true) // senddir call was successful
+			) {
+				sendDirQueue.shift(); //remove item
+			}
+		}
+
+		if (!uglyMode) {
+			this.drawDiagonalLines(this.linesCtx, "white", 5, 10, timeStamp * 0.008);
+		}
+
+		//restore cam transforms
+		ctx.restore();
+
+		if (!uglyMode) {
+			this.linesCtx.restore();
+			ctx.globalCompositeOperation = "multiply";
+			// ctx.clearRect(0,0,mainCanvas.width, mainCanvas.height)
+			ctx.drawImage(this.linesCanvas, 0, 0);
+			ctx.globalCompositeOperation = "source-over";
+		}
+	}
+	
+	/** applies camShakeForces */
+	calcCamOffset(deltaTime){
+		this.camPosOffset = [0, 0];
+		this.camRotOffset = 0;
+		for (let i = this.camShakeForces.length - 1; i >= 0; i--) {
+			const force = this.camShakeForces[i];
+			force[2] += deltaTime * 0.003;
+			const t = force[2];
+			let t3 = 0, t2 = 0;
+			if (t < 1) {
+				t2 = ease.out(t);
+				t3 = ease.inout(t);
+			} else if (t < 8) {
+				t2 = ease.inout(iLerp(8, 1, t));
+				t3 = ease.in(iLerp(8, 1, t));
+			} else {
+				this.camShakeForces.splice(i, 1);
+			}
+			this.camPosOffset[0] += force[0] * t2;
+			this.camPosOffset[1] += force[1] * t2;
+
+			this.camPosOffset[0] += force[0] * Math.cos(t * 8) * 0.04 * t3;
+			this.camPosOffset[1] += force[1] * Math.cos(t * 7) * 0.04 * t3;
+			if (force[3]) {
+				this.camRotOffset += Math.cos(t * 9) * 0.003 * t3;
+			}
+		}
+		const limit = 80;
+		this.camPosOffset[0] /= limit;
+		this.camPosOffset[1] /= limit;
+		this.camPosOffset[0] = smoothLimit(this.camPosOffset[0]);
+		this.camPosOffset[1] = smoothLimit(this.camPosOffset[1]);
+		this.camPosOffset[0] *= limit;
+		this.camPosOffset[1] *= limit;
+	}
+
+	//shakes the camera but uses a dir (ranges from 0-3) as input
+	doCamShakeDir(dir, amount, doRotate) {
+		if (amount === undefined) {
+			amount = 6;
+		}
+		if (doRotate === undefined) {
+			doRotate = true;
+		}
+		let x = 0, y = 0;
+		switch (dir) {
+			case 0:
+				x = amount;
+				break;
+			case 1:
+				y = amount;
+				break;
+			case 2:
+				x = -amount;
+				break;
+			case 3:
+				y = -amount;
+				break;
+		}
+		this.camShakeForces.push([x, y, 0, !!doRotate]);
+	}
+}
+
 class MinimapCanvas {
 	/**@type {HTMLCanvasElement} */
 	canvas;
 	ctx;
-	constructor(){
-		this.canvas = document.getElementById("minimapCanvas");
+	constructor(canvas){
+		if(canvas === undefined){
+			canvas = document.createElement('canvas');
+		}
+		this.canvas = canvas;
 		this.ctx = this.canvas.getContext("2d");
 	}
 
@@ -1668,16 +1690,14 @@ class MinimapCanvas {
 }
 
 class SplixLogoCanvas extends SplixBaseCanvas {
-	canvas;
-	ctx;
 	timer = -1;
 	resetNextFrame = true;
 	lastRender = 0;
 	canvasTransformType = canvasTransformTypes.TITLE;
 	w = 520;
 	h = 180;
-	constructor(){
-		super();
+	constructor(canvas){
+		super(canvas);
 		for (const line of titleLines) {
 			for (const subline of line.line) {
 				for (let coordI = 0; coordI < subline.length; coordI += 2) {
@@ -1686,8 +1706,6 @@ class SplixLogoCanvas extends SplixBaseCanvas {
 				}
 			}
 		}
-		this.canvas= document.getElementById("logoCanvas");
-		this.ctx = this.canvas.getContext("2d");
 	}
 
 	get styleRatio(){
@@ -1820,10 +1838,8 @@ class TransitionCanvas extends SplixBaseCanvas {
 	reverseOnHalf = false;
 	/** @type {string}*/
 	text = "GAME OVER";
-	constructor(){
-		super();
-		this.canvas = document.getElementById("transitionCanvas");
-		this.ctx = this.canvas.getContext('2d');
+	constructor(canvas){
+		super(canvas);
 		this.tempCanvas = document.createElement("canvas");
 		this.tempCtx = this.tempCanvas.getContext("2d");
 	}
@@ -2062,10 +2078,8 @@ class LifeCanvas extends SplixBaseCanvas {
 	animDir = 0;
 	isLife = true;
 	canvasTransformType = canvasTransformTypes.LIFE;
-	constructor(node,ctx){
-		super();
-		this.canvas=node;
-		this.ctx=ctx;
+	constructor(canvas){
+		super(canvas);
 	}
 	render(dt, force) {
 		if (this.animDir !== 0 || force) {
@@ -2226,8 +2240,7 @@ class LifeBox {
 		for (let i = 0; i < total - oldLength; i++) {
 			const el = document.createElement("canvas");
 			el.style.margin = "-15px";
-			const ctx = el.getContext("2d");
-			const life = new LifeCanvas(el,ctx);
+			const life = new LifeCanvas(el);
 			this.box.appendChild(el);
 			this.lives.push(life);
 			life.render(0, true);
@@ -2993,13 +3006,13 @@ function honkEnd() {
 
 //when page is finished loading
 window.addEventListener('load', function () {
-	main_canvas = new SplixCanvas();
-	minimap_canvas = new MinimapCanvas();
+	main_canvas = new SplixCanvas(document.getElementById("mainCanvas"));
+	minimap_canvas = new MinimapCanvas(document.getElementById("minimapCanvas"));
 	linesCanvas = document.createElement("canvas");
 	linesCtx = linesCanvas.getContext("2d");
 	tempCanvas = document.createElement("canvas");
 	tempCtx = tempCanvas.getContext("2d");
-	transition_canvas = new TransitionCanvas();
+	transition_canvas = new TransitionCanvas(document.getElementById("transitionCanvas"));
 	tutorialCanvas = document.getElementById("tutorialCanvas");
 	tutCtx = tutorialCanvas.getContext("2d");
 	tutorialText = document.getElementById("tutorialText");
@@ -3088,7 +3101,7 @@ window.addEventListener('load', function () {
 
 	initTutorial();
 	initSkinScreen();
-	title_canvas = new SplixLogoCanvas();
+	title_canvas = new SplixLogoCanvas(document.getElementById("logoCanvas"));
 	setLeaderboardVisibility();
 
 	//best stats
