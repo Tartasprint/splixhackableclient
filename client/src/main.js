@@ -291,8 +291,10 @@ const iLerp = (a, b, t) => {
  * 
  * @param {number} a
  * @param {number} b
- * @param {number} t */
-const lerpt = (a, b, t) => {
+ * @param {number} t
+ * @param {number} deltaTime
+ */
+const lerpt = (a, b, t, deltaTime) => {
 	return lerptt(a, b, t, deltaTime / 16.6666);
 }
 
@@ -849,9 +851,10 @@ class SplixBaseCamera extends SplixBaseCanvas {
 	}
 	/** draws blocks on ctx
 	 * Uses linesCtx
+	 * @param {Map<Vec2,Block>} blocks
 	 */
-	drawBlocks(blocks, checkViewport) {
-		for (const block of blocks) {
+	drawBlocks(deltaTime,blocks, checkViewport) {
+		for (const block of blocks.values()) { // TODO: in non ugly mode, consider reusing the generated block
 			if (
 				checkViewport &&
 				(
@@ -890,6 +893,9 @@ class SplixBaseCamera extends SplixBaseCanvas {
 					}
 					//empty block
 					if (block.currentBlock == 1) {
+						//BG
+						this.ctx.fillStyle = colors.grey.BG;
+						this.ctx.fillRect(block.x * 10, block.y * 10, 10, 10);
 						//shadow edge
 						if (t > 0.8 && !uglyMode) {
 							this.ctx.fillStyle = colors.grey.darker;
@@ -1163,7 +1169,7 @@ class SplixBaseCamera extends SplixBaseCanvas {
 				ctx.beginPath();
 				ctx.arc(dp[0] - so, dp[1] - so, pr, 0, 2 * Math.PI, false);
 				ctx.fill();
-				if (player.isMyPlayer && localStorage.drawWhiteDot == "true") {
+				if (player.mydata && localStorage.drawWhiteDot == "true") {
 					ctx.fillStyle = "white";
 					ctx.beginPath();
 					ctx.arc(dp[0] - so, dp[1] - so, 1, 0, 2 * Math.PI, false);
@@ -1180,10 +1186,10 @@ class SplixBaseCamera extends SplixBaseCanvas {
 					this.linesCtx.fill();
 				}
 			}
-			if (player.isMyPlayer && localStorage.drawActualPlayerPos == "true") {
+			if (player.mydata && localStorage.drawActualPlayerPos == "true") {
 				ctx.fillStyle = "#FF0000";
 				ctx.beginPath();
-				ctx.arc(player.serverPos[0] * 10 + 5, player.serverPos[1] * 10 + 5, pr, 0, 2 * Math.PI, false);
+				ctx.arc(player.mydata.serverPos[0] * 10 + 5, player.mydata.serverPos[1] * 10 + 5, pr, 0, 2 * Math.PI, false);
 				ctx.fill();
 			}
 
@@ -1222,7 +1228,7 @@ class SplixBaseCamera extends SplixBaseCanvas {
 					}
 
 					//draw 500+
-					if (thisHit.color !== undefined && player.isMyPlayer) {
+					if (thisHit.color !== undefined && player.mydata) {
 						ctx.save();
 						ctx.font = this.linesCtx.font = "6px Arial, Helvetica, sans-serif";
 						ctx.fillStyle = thisHit.color.brighter;
@@ -1290,7 +1296,7 @@ class SplixBaseCamera extends SplixBaseCanvas {
 				ctx.font = this.linesCtx.font = USERNAME_SIZE + "px Arial, Helvetica, sans-serif";
 				if (player.name) {
 					let myAlpha = 1;
-					if (player.isMyPlayer) {
+					if (player.mydata) {
 						myAlpha = 9 - this.myNameAlphaTimer;
 					}
 					let deadAlpha = 1;
@@ -1418,143 +1424,11 @@ class SplixCanvas extends SplixBaseCamera {
 		}
 
 		//draw blocks
-		this.drawBlocks(blocks, true);
+		this.drawBlocks(deltaTime,game_state.blocks, true);
 
 		//players
-		let offset = deltaTime * GLOBAL_SPEED;
-		for (const player of players) {
-			//move player
-			if (!player.isDead || !player.deathWasCertain) {
-				if (player.moveRelativeToServerPosNextFrame) {
-					offset = (Date.now() - player.lastServerPosSentTime) * GLOBAL_SPEED;
-				}
-				if (player.isMyPlayer) {
-					movePos(player.serverPos, player.serverDir, offset);
-					if (player.serverDir == player.dir) {
-						let clientServerDist = 0;
-						if (localStorage.dontSlowPlayersDown != "true") {
-							if (player.dir === 0 || player.dir == 2) { //left or right
-								if (player.pos.y == player.serverPos.y) {
-									if (player.dir === 0) { //right
-										clientServerDist = player.pos[0] - player.serverPos[0];
-									} else { //left
-										clientServerDist = player.serverPos[0] - player.pos[0];
-									}
-								}
-							} else { //up or down
-								if (player.pos.x == player.serverPos.x) {
-									if (player.dir == 1) { //down
-										clientServerDist = player.pos[1] - player.serverPos[1];
-									} else { //up
-										clientServerDist = player.serverPos[1] - player.pos[1];
-									}
-								}
-							}
-						}
-						clientServerDist = Math.max(0, clientServerDist);
-						offset *= lerp(0.5, 1, iLerp(5, 0, clientServerDist));
-					}
-				}
-				movePos(player.pos, player.dir, offset);
-			}
-			player.moveRelativeToServerPosNextFrame = false;
-
-			player.moveDrawPosToPos();
-
-			//test if player should be dead
-			let playerShouldBeDead = false;
-			if (
-				player.drawPos[0] <= 0 || player.drawPos[1] <= 0 || player.drawPos[0] >= mapSize - 1 ||
-				player.drawPos[1] >= mapSize - 1
-			) {
-				playerShouldBeDead = true;
-			} else if (player.trails.length > 0) {
-				const lastTrail = player.trails[player.trails.length - 1].trail;
-				const roundedPos = [Math.round(player.drawPos[0]), Math.round(player.drawPos[1])];
-				if (
-					Math.abs(roundedPos[0] - player.drawPos[0]) < 0.2 &&
-					Math.abs(roundedPos[1] - player.drawPos[1]) < 0.2
-				) {
-					//only die if player.pos is close to the center of a block
-					let touchingPrevTrail = true;
-					for (let i = lastTrail.length - 3; i >= 0; i--) {
-						const pos1 = [Math.round(lastTrail[i][0]), Math.round(lastTrail[i][1])];
-						const pos2 = [Math.round(lastTrail[i + 1][0]), Math.round(lastTrail[i + 1][1])];
-						const twoPos = orderTwoPos(pos1, pos2);
-						if (
-							roundedPos[0] >= twoPos[0][0] &&
-							roundedPos[0] <= twoPos[1][0] &&
-							roundedPos[1] >= twoPos[0][1] &&
-							roundedPos[1] <= twoPos[1][1]
-						) {
-							if (!touchingPrevTrail) {
-								playerShouldBeDead = true;
-							}
-							touchingPrevTrail = true;
-						} else {
-							touchingPrevTrail = false;
-						}
-					}
-				}
-			}
-			if (playerShouldBeDead) {
-				if (!player.isDead) {
-					player.die();
-				}
-			} else {
-				player.didUncertainDeathLastTick = false;
-			}
-
-			//test if player shouldn't be dead after all
-			if (player.isDead && !player.deathWasCertain && player.isDeadTimer > 1.5) {
-				player.isDead = false;
-				if (player.trails.length > 0) {
-					const lastTrail = player.trails[player.trails.length - 1];
-					lastTrail.vanishTimer = 0;
-				}
-			}
-
-			//if my player
-			if (player.isMyPlayer) {
-				myPos = [player.pos[0], player.pos[1]];
-				miniMapPlayer.style.left = (myPos[0] / mapSize * 160 + 1.5) + "px";
-				miniMapPlayer.style.top = (myPos[1] / mapSize * 160 + 1.5) + "px";
-				if (this.camPosSet) {
-					this.camPos[0] = lerpt(this.camPos[0], player.pos[0], 0.03);
-					this.camPos[1] = lerpt(this.camPos[1], player.pos[1], 0.03);
-				} else {
-					this.camPos = [player.pos[0], player.pos[1]];
-					this.camPosSet = true;
-				}
-
-				if (myNextDir != player.dir) {
-					// console.log("myNextDir != player.dir (",myNextDir,"!=",player.dir,")");
-					const horizontal = player.dir === 0 || player.dir == 2;
-					//only change when currently traveling horizontally and new dir is not horizontal
-					//or when new dir is horizontal but not currently traveling horizontally
-					if (changeDirAtIsHorizontal != horizontal) {
-						let changeDirNow = false;
-						const currentCoord = player.pos[horizontal ? 0 : 1];
-						if (player.dir === 0 || player.dir == 1) { //right & down
-							if (changeDirAt < currentCoord) {
-								changeDirNow = true;
-							}
-						} else {
-							if (changeDirAt > currentCoord) {
-								changeDirNow = true;
-							}
-						}
-						if (changeDirNow) {
-							const newPos = [player.pos[0], player.pos[1]];
-							const tooFarTraveled = Math.abs(changeDirAt - currentCoord);
-							newPos[horizontal ? 0 : 1] = changeDirAt;
-							changeMyDir(myNextDir, newPos);
-							movePos(player.pos, player.dir, tooFarTraveled);
-						}
-					}
-				}
-			}
-
+		for (const player of game_state.players.values()) {
+			player.update(deltaTime);
 			this.drawPlayer(player, timeStamp, deltaTime);
 		}
 
@@ -1832,7 +1706,7 @@ class TransitionCanvas extends SplixBaseCanvas {
 		this.tempCtx = this.tempCanvas.getContext("2d");
 	}
 
-	render(){
+	render(deltaTime){
 		let DARK_EDGE_SIZE = 10, TITLE_HEIGHT = 60, TITLE_DURATION = 2, TITLE_PADDING = 10, TEXT_EXTRUDE = 5;
 		TITLE_HEIGHT *= MAX_PIXEL_RATIO;
 		TEXT_EXTRUDE *= MAX_PIXEL_RATIO;
@@ -2210,22 +2084,24 @@ class TutorialCanvas extends SplixBaseCamera {
 	/** @type {number} */
 	prevTimer = 0;
 	/** @type {Player} */
-	p1 = new Player(1);
+	p1;
 	/** @type {Player} */
-	p2 = new Player(2);
+	p2;
 	text;
-	blocks = [];
+	state = new SplixState();
 	constructor(canvas,text){
 		super(canvas);
 		this.text = text;
+		this.p1 = this.state.getPlayer(1);
 		this.p1.skinBlock = 8;
 		this.p1.hasReceivedPosition = true;
+		this.p2 = this.state.getPlayer(2);
 		this.p2.skinBlock = 0;
 		this.p2.pos = [-2, 7];
 		this.p2.hasReceivedPosition = true;
 		for (let x = 0; x < 10; x++) {
 			for (let y = 0; y < 10; y++) {
-				const block = getBlock(x, y, this.blocks);
+				const block = this.state.getBlock(x, y);
 				let id = 1;
 				if (x >= 1 && x <= 3 && y >= 1 && y <= 3) {
 					id = 10;
@@ -2257,7 +2133,7 @@ class TutorialCanvas extends SplixBaseCamera {
 		}
 
 		const t = this.timer;
-		this.drawBlocks(this.blocks);
+		this.drawBlocks(deltaTime,this.state.blocks);
 
 		//p1
 		if (t < 10) {
@@ -2333,16 +2209,16 @@ class TutorialCanvas extends SplixBaseCamera {
 		}
 
 		if (t > 25 && this.prevTimer < 25) {
-			fillArea(2, 2, 6, 4, 10, 0, this.blocks);
+			this.state.fillArea(2, 2, 6, 4, 10, 0);
 		}
 		if (t > 39 && this.prevTimer < 39) {
 			this.p1.die(true);
-			fillArea(1, 1, 7, 5, 1, 0, this.blocks);
+			this.state.fillArea(1, 1, 7, 5, 1, 0);
 			this.p2.addHitLine([2, 7]);
 		}
 		if (t > 50) {
 			this.timer = this.prevTimer = 0;
-			fillArea(1, 1, 3, 3, 10, 0, this.blocks);
+			this.state.fillArea(1, 1, 3, 3, 10, 0);
 			this.p1.isDeadTimer = 0;
 			this.p1.isDead = false;
 			this.p1.trails = [];
@@ -2368,8 +2244,8 @@ class TutorialCanvas extends SplixBaseCamera {
 						  	+ clamp01(4 - Math.abs((t - 40) * 0.5)));
 		this.text.style.opacity = clamp(textOpacity, 0, 0.9);
 
-		this.p1.moveDrawPosToPos();
-		this.p2.moveDrawPosToPos();
+		this.p1.moveDrawPosToPos(deltaTime);
+		this.p2.moveDrawPosToPos(deltaTime);
 		this.ctx.globalAlpha = Math.min(1, Math.max(0, t * 0.3 - 1));
 
 		this.drawPlayer(this.p1, timeStamp, deltaTime);
@@ -2404,7 +2280,7 @@ class TutorialCanvas extends SplixBaseCamera {
 
 class SkinButtonCanvas extends SplixBaseCamera {
 	canvasTransformType = canvasTransformTypes.SKIN_BUTTON;
-	blocks = [];
+	block = new Block();
 	shadow;
 	constructor(canvas,shadow){
 		super(canvas);
@@ -2420,8 +2296,7 @@ class SkinButtonCanvas extends SplixBaseCamera {
 				transition_canvas.doTransition("", false, openSkinScreen);
 			}
 		});
-		const block = getBlock(0, 0, this.blocks);
-		block.setBlockId(currentColor + 1, false);
+		this.block.setBlockId(currentColor + 1, false);
 		this.canvas.addEventListener('mouseover', () => {
 			// TODO Live update skin color without needing to mouseover (listen to storage events)
 			// this currently is just for animation purposes
@@ -2431,7 +2306,7 @@ class SkinButtonCanvas extends SplixBaseCamera {
 			}
 			currentColor = parseInt(currentColor);
 			if (currentColor > 0) {
-				this.blocks[0].setBlockId(currentColor + 1 + SKIN_BLOCK_COUNT, false);
+				this.block.setBlockId(currentColor + 1 + SKIN_BLOCK_COUNT, false);
 			}
 		});
 		this.canvas.addEventListener('mouseout',() => {
@@ -2439,13 +2314,13 @@ class SkinButtonCanvas extends SplixBaseCamera {
 			if (currentColor === null) {
 				currentColor = 0;
 			}
-			this.blocks[0].setBlockId(parseInt(currentColor) + 1, false);
+			this.block.setBlockId(parseInt(currentColor) + 1, false);
 		});
 	}
 	
-	render(){
+	render(deltaTime){
 		this.ctxApplyCamTransform(true,true);
-		this.drawBlocks(this.blocks);
+		this.drawBlocks(deltaTime,[this.block]);
 		this.ctx.restore();
 	}
 
@@ -2453,7 +2328,7 @@ class SkinButtonCanvas extends SplixBaseCamera {
 
 class SkinScreen extends SplixBaseCamera {
 	canvasTransformType = canvasTransformTypes.SKIN;
-	blocks = [];
+	state = new SplixState();
 	#visible = true;
 	/** @type {HTMLElement} */
 	container;
@@ -2471,7 +2346,7 @@ class SkinScreen extends SplixBaseCamera {
 			currentPattern = 0;
 		}
 		currentPattern = parseInt(currentPattern);
-		fillArea(0, 0, VIEWPORT_RADIUS * 2, VIEWPORT_RADIUS * 2, currentColor + 1, currentPattern, this.blocks);
+		this.state.fillArea(0, 0, VIEWPORT_RADIUS * 2, VIEWPORT_RADIUS * 2, currentColor + 1, currentPattern);
 	
 		document.getElementById("prevColor").addEventListener('click', () => {
 			skinButton(-1, 0);
@@ -2491,9 +2366,9 @@ class SkinScreen extends SplixBaseCamera {
 	
 	}
 
-	render(){
+	render(deltaTime){
 		this.ctxApplyCamTransform(true);
-		this.drawBlocks(this.blocks);
+		this.drawBlocks(deltaTime,this.state.blocks);
 		this.ctx.restore();
 	}
 
@@ -2512,14 +2387,6 @@ class SkinScreen extends SplixBaseCamera {
 	}
 }
 //#endregion
-
-class SplixState {
-	blocks;
-	players;
-	getPlayer;
-	fillArea;
-}
-
 class LifeBox {
 	/**@type {LifeCanvas[]} */
 	lives = [];
@@ -2570,6 +2437,152 @@ class LifeBox {
 	}
 }
 
+class Block {
+	currentBlock = -1;
+	nextBlock =  -1;
+	animDirection =  0;
+	animProgress =  0;
+	animDelay =  0;
+	lastSetTime= Date.now();
+	constructor(x,y){
+		this.x = x;
+		this.y = y;
+	}
+	//changes the blockId with optional animatino
+	//animateDelay defaults to 0
+	//if animateDelay === false, don't do any animation at all
+	setBlockId(blockId, animateDelay) {
+		this.lastSetTime = Date.now();
+		if (animateDelay === false) {
+			this.currentBlock = this.nextBlock = blockId;
+			this.animDirection = 0;
+			this.animProgress = 1;
+		} else {
+			if (animateDelay === undefined) {
+				animateDelay = 0;
+			}
+			this.animDelay = animateDelay;
+
+			const isCurrentBlock = blockId == this.currentBlock;
+			const isNextBlock = blockId == this.nextBlock;
+
+			if (isCurrentBlock && isNextBlock) {
+				if (this.animDirection == -1) {
+					this.animDirection = 1;
+				}
+			}
+
+			if (isCurrentBlock && !isNextBlock) {
+				this.animDirection = 1;
+				this.nextBlock = this.currentBlock;
+			}
+
+			if (!isCurrentBlock && isNextBlock) {
+				if (this.animDirection == 1) {
+					this.animDirection = -1;
+				}
+			}
+
+			if (!isCurrentBlock && !isNextBlock) {
+				this.nextBlock = blockId;
+				this.animDirection = -1;
+			}
+		}
+	}
+}
+
+class SplixState {
+	/** @type {Map<Vec2, Block>} */
+	blocks = new Map();
+	/** @type {Map<number, Player>} */
+	players = new Map();
+	/** @type {Player?} */
+	my_player = null;
+
+	reset(){
+		this.blocks = new Map();
+		this.players = new Map();
+		this.my_player.mydata.reset();
+	}
+	/**
+	 * Gets the block at the (x,y) coordinates. If it does not exist, one
+	 * will be created.
+	 * @param {number} x
+	 * @param {number} y
+	 * @returns {Block}
+	 */
+	getBlock(x, y) {
+		if(this.blocks.has([x,y])){
+			return this.blocks.get([x,y]);
+		} else {
+			const block = new Block(x,y);
+			this.blocks.set([x,y], block);
+			return block;
+		}
+	}
+
+	//fills an area, if array is not specified it defaults to blocks[]
+	fillArea(x, y, w, h, type, pattern, isEdgeChunk = false) {
+		if (pattern === undefined) {
+			pattern = 0;
+		}
+
+		let x2 = x + w;
+		let y2 = y + h;
+		if (this?.my_player?.mydata?.myPos) {
+			x = Math.max(x, Math.round(this.my_player.mydata.myPos[0]) - VIEWPORT_RADIUS);
+			y = Math.max(y, Math.round(this.my_player.mydata.myPos[1]) - VIEWPORT_RADIUS);
+			x2 = Math.min(x2, Math.round(this.my_player.mydata.myPos[0]) + VIEWPORT_RADIUS);
+			y2 = Math.min(y2, Math.round(this.my_player.mydata.myPos[1]) + VIEWPORT_RADIUS);
+		}
+
+		for (let i = x; i < x2; i++) {
+			for (let j = y; j < y2; j++) {
+				const block = this.getBlock(i,j);
+				const thisType = applyPattern(type, pattern, i, j);
+				block.setBlockId(thisType, isEdgeChunk ? false : Math.random() * 400);
+			}
+		}
+	}
+
+	/** remove blocks that are too far away from the camera and are likely
+	 * to be seen without an updated state
+	 * @param {Vec2} pos
+	 */
+	removeBlocksOutsideViewport(pos) {
+		for(const [x,y] of this.blocks.keys()){
+			if (
+				x < pos[0] - VIEWPORT_RADIUS * 2 ||
+				x > pos[0] + VIEWPORT_RADIUS * 2 ||
+				y < pos[1] - VIEWPORT_RADIUS * 2 ||
+				y > pos[1] + VIEWPORT_RADIUS * 2
+			) {
+				this.blocks.delete([x,y]);
+			}
+		}
+	}
+
+
+	/**
+	 * Gets the player at the (x,y) coordinates. If it does not exist, one
+	 * will be created.
+	 * @param {number} id
+	 * @returns {Player}
+	 */
+	getPlayer(id) {
+		if(this.players.has(id)){
+			return this.players.get(id);
+		} else {
+			const player = new Player(id);
+			this.players.set(id, player);
+			if(id === 0) this.my_player = player;
+			return player;
+		}
+	}
+
+}
+
+
 // Some dated code is using these in places like `for(i = 0`.
 // While ideally these variables should all be made local,
 // I'm worried some locations actually rely on them not being local.
@@ -2581,14 +2594,11 @@ const SECURE_WS = IS_SECURE ? "wss://" : "ws://";
 /** @type {SplixCanvas} main ctx */
 let main_canvas;
 
-var prevTimeStamp = null, blocks = [],
-/** @type {Player[]} */
-players = [];
-var myPos = null,
-	myPlayer = null,
+let game_state = new SplixState();
+var prevTimeStamp = null;
+var /** @type {Player} */
 	changeDirAt = null,
 	changeDirAtIsHorizontal = false,
-	myNextDir = 0,
 	lastChangedDirPos = null;
 var lastClientsideMoves = [],
 	isRequestingMyTrail = false,
@@ -2605,7 +2615,6 @@ currentDtCap = 0,
 	myKillsElem,
 	myRealScoreElem,
 	myRankElem,
-	myRank = 0,
 	myRankSent = false,
 	totalPlayersElem,
 	totalPlayers = 0;
@@ -2882,76 +2891,6 @@ function startPingServers() {
 	}
 }
 
-//gets a block from the specified array,
-//creates it if it doesn't exist yet
-//if array is not specified it will default to the blocks[] array
-function getBlock(x, y, array) {
-	var block;
-	if (array === undefined) {
-		array = blocks;
-	}
-	for (var i = 0; i < array.length; i++) {
-		block = array[i];
-		if (block.x == x && block.y == y) {
-			return block;
-		}
-	}
-	//block doesn't exist, create it
-	block = {
-		x: x,
-		y: y,
-		currentBlock: -1,
-		nextBlock: -1,
-		animDirection: 0,
-		animProgress: 0,
-		animDelay: 0,
-		lastSetTime: Date.now(),
-		//changes the blockId with optional animatino
-		//animateDelay defaults to 0
-		//if animateDelay === false, don't do any animation at all
-		setBlockId: function (blockId, animateDelay) {
-			this.lastSetTime = Date.now();
-			if (animateDelay === false) {
-				this.currentBlock = this.nextBlock = blockId;
-				this.animDirection = 0;
-				this.animProgress = 1;
-			} else {
-				if (animateDelay === undefined) {
-					animateDelay = 0;
-				}
-				this.animDelay = animateDelay;
-
-				var isCurrentBlock = blockId == this.currentBlock;
-				var isNextBlock = blockId == this.nextBlock;
-
-				if (isCurrentBlock && isNextBlock) {
-					if (this.animDirection == -1) {
-						this.animDirection = 1;
-					}
-				}
-
-				if (isCurrentBlock && !isNextBlock) {
-					this.animDirection = 1;
-					this.nextBlock = this.currentBlock;
-				}
-
-				if (!isCurrentBlock && isNextBlock) {
-					if (this.animDirection == 1) {
-						this.animDirection = -1;
-					}
-				}
-
-				if (!isCurrentBlock && !isNextBlock) {
-					this.nextBlock = blockId;
-					this.animDirection = -1;
-				}
-			}
-		},
-	};
-	array.push(block);
-	return block;
-}
-
 class Player extends EventTarget {
 	constructor(id){
 		super();
@@ -2959,9 +2898,8 @@ class Player extends EventTarget {
 		this.pos = [0,0];
 		this.drawPos = [-1,-1];
 		this.drawPosSet = false;
-		this.serverPos= [0, 0];
 		this.dir= 0;
-		this.isMyPlayer= id === 0;
+		this.mydata= id === 0 ? new MyPlayerData() : null;
 		this.isDead= false;
 		this.deathWasCertain= false;
 		this.didUncertainDeathLastTick= false;
@@ -2977,7 +2915,6 @@ class Player extends EventTarget {
 		this.trails= [];
 		this.name= "";
 		this.skinBlock= 0;
-		this.lastBlock= null;
 		this.hasReceivedPosition= false;
 	}
 	die(deathWasCertain) {
@@ -2994,7 +2931,7 @@ class Player extends EventTarget {
 				this.deathWasCertain = deathWasCertain;
 				this.deadAnimParts = [0];
 				this.isDeadTimer = 0;
-				if (this.isMyPlayer) {
+				if (this.mydata) {
 					main_canvas.doCamShakeDir(this.dir);
 				}
 				var prev = 0;
@@ -3032,7 +2969,7 @@ class Player extends EventTarget {
 		}
 	}
 	//moves (lerp) drawPos to the actual player position
-	moveDrawPosToPos(){
+	moveDrawPosToPos(deltaTime){
 		// var xDist = Math.abs(player.pos[0] - player.drawPos[0]);
 		// var yDist = Math.abs(player.pos[1] - player.drawPos[1]);
 		let target;
@@ -3041,34 +2978,160 @@ class Player extends EventTarget {
 		} else {
 			target = this.pos;
 		}
-		this.drawPos[0] = lerpt(this.drawPos[0], target[0], 0.23);
-		this.drawPos[1] = lerpt(this.drawPos[1], target[1], 0.23);
+		this.drawPos[0] = lerpt(this.drawPos[0], target[0], 0.23, deltaTime);
+		this.drawPos[1] = lerpt(this.drawPos[1], target[1], 0.23, deltaTime);
+	}
+
+	update(deltaTime){
+		let offset = deltaTime * GLOBAL_SPEED;
+		//move player
+		if (!this.isDead || !this.deathWasCertain) {
+			if (this.moveRelativeToServerPosNextFrame) {
+				offset = (Date.now() - this.lastServerPosSentTime) * GLOBAL_SPEED;
+			}
+			if (this.mydata) {
+				movePos(this.mydata.serverPos, this.mydata.serverDir, offset);
+				if (this.mydata.serverDir == this.dir) {
+					let clientServerDist = 0;
+					if (localStorage.dontSlowPlayersDown != "true") {
+						if (this.dir === 0 || this.dir == 2) { //left or right
+							if (this.pos.y == this.mydata.serverPos.y) {
+								if (this.dir === 0) { //right
+									clientServerDist = this.pos[0] - this.mydata.serverPos[0];
+								} else { //left
+									clientServerDist = this.mydata.serverPos[0] - this.pos[0];
+								}
+							}
+						} else { //up or down
+							if (this.pos.x == this.mydata.serverPos.x) {
+								if (this.dir == 1) { //down
+									clientServerDist = this.pos[1] - this.mydata.serverPos[1];
+								} else { //up
+									clientServerDist = this.mydata.serverPos[1] - this.pos[1];
+								}
+							}
+						}
+					}
+					clientServerDist = Math.max(0, clientServerDist);
+					offset *= lerp(0.5, 1, iLerp(5, 0, clientServerDist));
+				}
+			}
+			movePos(this.pos, this.dir, offset);
+		}
+		this.moveRelativeToServerPosNextFrame = false;
+
+		this.moveDrawPosToPos(deltaTime);
+
+		//test if player should be dead
+		let playerShouldBeDead = false;
+		if (
+			this.drawPos[0] <= 0 || this.drawPos[1] <= 0 || this.drawPos[0] >= mapSize - 1 ||
+			this.drawPos[1] >= mapSize - 1
+		) {
+			playerShouldBeDead = true;
+		} else if (this.trails.length > 0) {
+			const lastTrail = this.trails[this.trails.length - 1].trail;
+			const roundedPos = [Math.round(this.drawPos[0]), Math.round(this.drawPos[1])];
+			if (
+				Math.abs(roundedPos[0] - this.drawPos[0]) < 0.2 &&
+				Math.abs(roundedPos[1] - this.drawPos[1]) < 0.2
+			) {
+				//only die if player.pos is close to the center of a block
+				let touchingPrevTrail = true;
+				for (let i = lastTrail.length - 3; i >= 0; i--) {
+					const pos1 = [Math.round(lastTrail[i][0]), Math.round(lastTrail[i][1])];
+					const pos2 = [Math.round(lastTrail[i + 1][0]), Math.round(lastTrail[i + 1][1])];
+					const twoPos = orderTwoPos(pos1, pos2);
+					if (
+						roundedPos[0] >= twoPos[0][0] &&
+						roundedPos[0] <= twoPos[1][0] &&
+						roundedPos[1] >= twoPos[0][1] &&
+						roundedPos[1] <= twoPos[1][1]
+					) {
+						if (!touchingPrevTrail) {
+							playerShouldBeDead = true;
+						}
+						touchingPrevTrail = true;
+					} else {
+						touchingPrevTrail = false;
+					}
+				}
+			}
+		}
+		if (playerShouldBeDead) {
+			if (!this.isDead) {
+				this.die();
+			}
+		} else {
+			this.didUncertainDeathLastTick = false;
+		}
+
+		//test if player shouldn't be dead after all
+		if (this.isDead && !this.deathWasCertain && this.isDeadTimer > 1.5) {
+			this.isDead = false;
+			if (this.trails.length > 0) {
+				const lastTrail = this.trails[this.trails.length - 1];
+				lastTrail.vanishTimer = 0;
+			}
+		}
+
+		//if my player
+		if (this.mydata) {
+			this.mydata.myPos = [this.pos[0], this.pos[1]];
+			miniMapPlayer.style.left = (this.mydata.myPos[0] / mapSize * 160 + 1.5) + "px";
+			miniMapPlayer.style.top = (this.mydata.myPos[1] / mapSize * 160 + 1.5) + "px";
+			if (main_canvas.camPosSet) {
+				main_canvas.camPos[0] = lerpt(main_canvas.camPos[0], this.pos[0], 0.03, deltaTime);
+				main_canvas.camPos[1] = lerpt(main_canvas.camPos[1], this.pos[1], 0.03, deltaTime);
+			} else {
+				main_canvas.camPos = [this.pos[0], this.pos[1]];
+				main_canvas.camPosSet = true;
+			}
+
+			if (this.mydata.nextDir != this.dir) {
+				// console.log("myNextDir != player.dir (",myNextDir,"!=",player.dir,")");
+				const horizontal = this.dir === 0 || this.dir == 2;
+				//only change when currently traveling horizontally and new dir is not horizontal
+				//or when new dir is horizontal but not currently traveling horizontally
+				if (changeDirAtIsHorizontal != horizontal) {
+					let changeDirNow = false;
+					const currentCoord = this.pos[horizontal ? 0 : 1];
+					if (this.dir === 0 || this.dir == 1) { //right & down
+						if (changeDirAt < currentCoord) {
+							changeDirNow = true;
+						}
+					} else {
+						if (changeDirAt > currentCoord) {
+							changeDirNow = true;
+						}
+					}
+					if (changeDirNow) {
+						const newPos = [this.pos[0], this.pos[1]];
+						const tooFarTraveled = Math.abs(changeDirAt - currentCoord);
+						newPos[horizontal ? 0 : 1] = changeDirAt;
+						changeMyDir(this.mydata.nextDir, newPos);
+						movePos(this.pos, this.dir, tooFarTraveled);
+					}
+				}
+			}
+		}
 	}
 }
 
-
-//gets a player from the the specified array,
-//creates it if it doesn't exist yet
-//if array is not specified it will default to the players[] array
-function getPlayer(id, array) {
-	var player;
-	if (array === undefined) {
-		array = players;
-	}
-	for (var i = 0; i < array.length; i++) {
-		player = array[i];
-		if (player.id == id) {
-			return player;
-		}
+class MyPlayerData {
+	constructor(){
+		this.nextDir = 0;
+		/** @type {Vec2} */
+		this.myPos = null;
+		this.rank = 0;
+		this.serverPos= [0, 0];
+		this.serverDir = null;
 	}
 
-	//player doesn't exist, create it
-	player = new Player(id);
-	array.push(player);
-	if (player.isMyPlayer) {
-		myPlayer = player;
+	reset(){
+		this.myPos = null;
+		this.rank = 0;
 	}
-	return player;
 }
 
 //localStorage with ios private mode error handling
@@ -3136,11 +3199,11 @@ function nameInputOnChange() {
 var lastSendDir = -1, lastSendDirTime = 0; //used to prevent spamming buttons
 function sendDir(dir, skipQueue) {
 	// console.log("======sendDir",dir, skipQueue);
-	if (!game_connection || !myPos) {
+	if (!game_connection || !game_state.my_player.mydata.myPos) {
 		return false;
 	}
-	//myPlayer doesn't exist
-	if (!myPlayer) {
+	//game_state.my_player doesn't exist
+	if (!game_state.my_player) {
 		return false;
 	}
 
@@ -3155,7 +3218,7 @@ function sendDir(dir, skipQueue) {
 	lastSendDirTime = Date.now();
 
 	//dir is already the current direction, don't do anything
-	if (myPlayer.dir == dir) {
+	if (game_state.my_player.dir == dir) {
 		// console.log("already current direction, don't do anything");
 		addSendDirQueue(dir, skipQueue);
 		return false;
@@ -3163,10 +3226,10 @@ function sendDir(dir, skipQueue) {
 
 	//if dir is the opposite direction
 	if (
-		(dir === 0 && myPlayer.dir == 2) ||
-		(dir == 2 && myPlayer.dir === 0) ||
-		(dir == 1 && myPlayer.dir == 3) ||
-		(dir == 3 && myPlayer.dir == 1)
+		(dir === 0 && game_state.my_player.dir == 2) ||
+		(dir == 2 && game_state.my_player.dir === 0) ||
+		(dir == 1 && game_state.my_player.dir == 3) ||
+		(dir == 3 && game_state.my_player.dir == 1)
 	) {
 		// console.log("already opposite direction, don't send");
 		addSendDirQueue(dir, skipQueue);
@@ -3177,9 +3240,9 @@ function sendDir(dir, skipQueue) {
 	mouseHidePos = [lastMousePos[0], lastMousePos[1]];
 	document.body.style.cursor = "none";
 
-	var horizontal = myPlayer.dir == 1 || myPlayer.dir == 3; //wether next direction is horizontal movement or not
-	var coord = myPos[horizontal ? 1 : 0];
-	var newPos = [myPos[0], myPos[1]];
+	var horizontal = game_state.my_player.dir == 1 || game_state.my_player.dir == 3; //wether next direction is horizontal movement or not
+	let coord = game_state.my_player.mydata.myPos[horizontal ? 1 : 0];
+	var newPos = [game_state.my_player.mydata.myPos[0], game_state.my_player.mydata.myPos[1]];
 	var roundCoord = Math.round(coord);
 	newPos[horizontal ? 1 : 0] = roundCoord;
 
@@ -3188,10 +3251,10 @@ function sendDir(dir, skipQueue) {
 	//test if the coordinate being sent wasn't already sent earlier
 	// console.log(lastChangedDirPos);
 	if (
-		(myPlayer.dir === 0 && newPos[0] <= lastChangedDirPos[0]) ||
-		(myPlayer.dir == 1 && newPos[1] <= lastChangedDirPos[1]) ||
-		(myPlayer.dir == 2 && newPos[0] >= lastChangedDirPos[0]) ||
-		(myPlayer.dir == 3 && newPos[1] >= lastChangedDirPos[1])
+		(game_state.my_player.dir === 0 && newPos[0] <= lastChangedDirPos[0]) ||
+		(game_state.my_player.dir == 1 && newPos[1] <= lastChangedDirPos[1]) ||
+		(game_state.my_player.dir == 2 && newPos[0] >= lastChangedDirPos[0]) ||
+		(game_state.my_player.dir == 3 && newPos[1] >= lastChangedDirPos[1])
 	) {
 		// console.log("same coordinate, don't send");
 		addSendDirQueue(dir, skipQueue);
@@ -3200,11 +3263,11 @@ function sendDir(dir, skipQueue) {
 
 	var changeDirNow = false;
 	var blockPos = coord - Math.floor(coord);
-	if (myPlayer.dir <= 1) { //right or down
+	if (game_state.my_player.dir <= 1) { //right or down
 		if (blockPos < 0.45) {
 			changeDirNow = true;
 		}
-	} else if (myPlayer.dir <= 3) { //left or up
+	} else if (game_state.my_player.dir <= 3) { //left or up
 		if (blockPos > 0.55) {
 			changeDirNow = true;
 		}
@@ -3217,7 +3280,7 @@ function sendDir(dir, skipQueue) {
 	if (changeDirNow) {
 		changeMyDir(dir, newPos);
 	} else {
-		myNextDir = dir;
+		game_state.my_player.mydata.nextDir = dir;
 		changeDirAt = roundCoord;
 		changeDirAtIsHorizontal = horizontal;
 		lastChangedDirPos = [newPos[0], newPos[1]];
@@ -3248,8 +3311,8 @@ function addSendDirQueue(dir, skip) {
 
 function changeMyDir(dir, newPos, extendTrail, isClientside) {
 	// console.log("changeMyDir");
-	myPlayer.dir = myNextDir = dir;
-	myPlayer.pos = [newPos[0], newPos[1]];
+	game_state.my_player.dir = game_state.my_player.mydata.nextDir = dir;
+	game_state.my_player.pos = [newPos[0], newPos[1]];
 	lastChangedDirPos = [newPos[0], newPos[1]];
 
 	if (extendTrail === undefined) {
@@ -3260,7 +3323,7 @@ function changeMyDir(dir, newPos, extendTrail, isClientside) {
 	}
 
 	if (extendTrail) {
-		trailPush(myPlayer);
+		trailPush(game_state.my_player);
 	}
 
 	if (isClientside) {
@@ -3283,7 +3346,7 @@ function trailPush(player, pos) {
 					pos = [pos[0], pos[1]];
 				}
 				lastTrail.push(pos);
-				if (player.isMyPlayer && isRequestingMyTrail) {
+				if (player.mydata && isRequestingMyTrail) {
 					game_connection.trailPushesDuringRequest.push(pos);
 				}
 			}
@@ -3308,12 +3371,7 @@ function honkEnd() {
 		time *= 255;
 		time = Math.floor(time);
 		game_connection.wsSendMsg(sendAction.HONK, time);
-		for (var playerI = 0; playerI < players.length; playerI++) {
-			var player = players[playerI];
-			if (player.isMyPlayer) {
-				player.doHonk(Math.max(70, time));
-			}
-		}
+		game_state.my_player?.doHonk(Math.max(70, time));
 	}
 }
 
@@ -3740,14 +3798,14 @@ class GameConnection {
 			const x = bytesToInt(data[1], data[2]);
 			const y = bytesToInt(data[3], data[4]);
 			const type = data[5];
-			const block = getBlock(x, y);
+			const block = game_state.getBlock(x, y);
 			block.setBlockId(type);
 		}
 		if (data[0] == receiveAction.PLAYER_POS) {
 			const x = bytesToInt(data[1], data[2]);
 			const y = bytesToInt(data[3], data[4]);
 			const id = bytesToInt(data[5], data[6]);
-			const player = getPlayer(id);
+			const player = game_state.getPlayer(id);
 			player.hasReceivedPosition = true;
 			player.moveRelativeToServerPosNextFrame = true;
 			player.lastServerPosSentTime = Date.now();
@@ -3758,20 +3816,20 @@ class GameConnection {
 
 			//add distance traveled during server delay (ping/2)
 			let posOffset = 0;
-			if (player.isMyPlayer || this.serverAvgPing > 50) {
+			if (player.mydata || this.serverAvgPing > 50) {
 				posOffset = this.serverAvgPing / 2 * GLOBAL_SPEED;
 			}
 			movePos(newPosOffset, newDir, posOffset);
 
 			let doSetPos = true;
-			if (player.isMyPlayer) {
+			if (player.mydata) {
 				lastMyPosServerSideTime = Date.now();
 				// console.log("current dir:",player.dir, "myNextDir", myNextDir, "newDir", newDir);
 				// console.log("newPosOffset",newPosOffset, "player.pos", player.pos);
 
 				//if dir and pos are close enough to the current dir and pos
 				if (
-					(player.dir == newDir || myNextDir == newDir) &&
+					(player.dir == newDir || player.mydata.nextDir == newDir) &&
 					Math.abs(newPosOffset[0] - player.pos[0]) < 1 &&
 					Math.abs(newPosOffset[1] - player.pos[1]) < 1
 				) {
@@ -3812,7 +3870,7 @@ class GameConnection {
 				// console.log("doSetPos:",doSetPos);
 				if (doSetPos) {
 					// console.log("==================doSetPos is true================");
-					myNextDir = newDir;
+					player.mydata.nextDir = newDir;
 					changeMyDir(newDir, newPos, false, false);
 					//doSetPos is true, so the server thinks the player is somewhere
 					//else than the client thinks he is. To prevent the trail from
@@ -3822,10 +3880,10 @@ class GameConnection {
 				}
 
 				//always set the server position
-				player.serverPos = [newPosOffset[0], newPosOffset[1]];
-				player.serverDir = newDir;
+				player.mydata.serverPos = [newPosOffset[0], newPosOffset[1]];
+				player.mydata.serverDir = newDir;
 
-				removeBlocksOutsideViewport(player.pos); // TODO Fog mode
+				game_state.removeBlocksOutsideViewport(player.pos); // TODO Fog mode
 			} else {
 				player.dir = newDir;
 			}
@@ -3861,11 +3919,11 @@ class GameConnection {
 			type = data[9];
 			const pattern = data[10];
 			const isEdgeChunk = data[11];
-			fillArea(x, y, w, h, type, pattern, undefined, isEdgeChunk);
+			game_state.fillArea(x, y, w, h, type, pattern, undefined, isEdgeChunk);
 		}
 		if (data[0] == receiveAction.SET_TRAIL) {
 			id = bytesToInt(data[1], data[2]);
-			player = getPlayer(id);
+			player = game_state.getPlayer(id);
 			const newTrail = [];
 			//wether the new trail should replace the old trail (don't play animation)
 			//or append it to the trails list (do play animation)
@@ -3874,7 +3932,7 @@ class GameConnection {
 				var coord = [bytesToInt(data[i], data[i + 1]), bytesToInt(data[i + 2], data[i + 3])];
 				newTrail.push(coord);
 			}
-			if (player.isMyPlayer) {
+			if (player.mydata) {
 				if (skipTrailRequestResponse) {
 					skipTrailRequestResponse = false;
 					game_connection.trailPushesDuringRequest = [];
@@ -3914,7 +3972,7 @@ class GameConnection {
 		}
 		if (data[0] == receiveAction.EMPTY_TRAIL_WITH_LAST_POS) {
 			id = bytesToInt(data[1], data[2]);
-			player = getPlayer(id);
+			player = game_state.getPlayer(id);
 			if (player.trails.length > 0) {
 				var prevTrail = player.trails[player.trails.length - 1].trail;
 				if (prevTrail.length > 0) {
@@ -3929,7 +3987,7 @@ class GameConnection {
 			//(one block or so) you'll start trailing
 			//in your own land. It's a ghost trail and you make
 			//ghost deaths every time you hit the line
-			if (player.isMyPlayer && isRequestingMyTrail) {
+			if (player.mydata && isRequestingMyTrail) {
 				skipTrailRequestResponse = true;
 			}
 
@@ -3940,7 +3998,7 @@ class GameConnection {
 		}
 		if (data[0] == receiveAction.PLAYER_DIE) {
 			id = bytesToInt(data[1], data[2]);
-			player = getPlayer(id);
+			player = game_state.getPlayer(id);
 			if (data.length > 3) {
 				x = bytesToInt(data[3], data[4]);
 				y = bytesToInt(data[5], data[6]);
@@ -3956,7 +4014,7 @@ class GameConnection {
 			i = 9;
 			for (j = x; j < x + w; j++) {
 				for (var k = y; k < y + h; k++) {
-					block = getBlock(j, k);
+					block = game_state.getBlock(j, k);
 					block.setBlockId(data[i], false);
 					i++;
 				}
@@ -3969,18 +4027,13 @@ class GameConnection {
 		}
 		if (data[0] == receiveAction.REMOVE_PLAYER) {
 			id = bytesToInt(data[1], data[2]);
-			for (i = players.length - 1; i >= 0; i--) {
-				player = players[i];
-				if (id == player.id) {
-					players.splice(i, 1);
-				}
-			}
+			game_state.players.delete(id);
 		}
 		if (data[0] == receiveAction.PLAYER_NAME) {
 			id = bytesToInt(data[1], data[2]);
 			nameBytes = data.subarray(3, data.length);
 			var name = Utf8ArrayToStr(nameBytes);
-			player = getPlayer(id);
+			player = game_state.getPlayer(id);
 			player.name = filter(name);
 		}
 		if (data[0] == receiveAction.MY_SCORE) {
@@ -3994,7 +4047,7 @@ class GameConnection {
 			myKillsElem.innerHTML = kills;
 		}
 		if (data[0] == receiveAction.MY_RANK) {
-			myRank = bytesToInt(data[1], data[2]);
+			game_state.my_player.mydata.rank = bytesToInt(data[1], data[2]);
 			myRankSent = true;
 			updateStats();
 		}
@@ -4112,8 +4165,8 @@ class GameConnection {
 		}
 		if (data[0] == receiveAction.PLAYER_SKIN) {
 			id = bytesToInt(data[1], data[2]);
-			player = getPlayer(id);
-			if (player.isMyPlayer) {
+			player = game_state.getPlayer(id);
+			if (player.mydata) {
 				myColorId = data[3];
 				colorUI();
 			}
@@ -4128,7 +4181,7 @@ class GameConnection {
 		}
 		if (data[0] == receiveAction.PLAYER_HIT_LINE) {
 			id = bytesToInt(data[1], data[2]);
-			player = getPlayer(id);
+			player = game_state.getPlayer(id);
 			var pointsColor = getColorForBlockSkinId(data[3]);
 			x = bytesToInt(data[4], data[5]);
 			y = bytesToInt(data[6], data[7]);
@@ -4137,7 +4190,7 @@ class GameConnection {
 				hitSelf = data[8] == 1;
 			}
 			player.addHitLine([x, y], pointsColor, hitSelf);
-			if (player.isMyPlayer && !hitSelf) {
+			if (player.mydata && !hitSelf) {
 				main_canvas.doCamShakeDir(player.dir, 10, false);
 			}
 		}
@@ -4146,7 +4199,7 @@ class GameConnection {
 		}
 		if (data[0] == receiveAction.PLAYER_HONK) {
 			id = bytesToInt(data[1], data[2]);
-			player = getPlayer(id);
+			player = game_state.getPlayer(id);
 			var time = data[3];
 			player.doHonk(time);
 		}
@@ -4162,7 +4215,7 @@ class GameConnection {
 		}
 		if (data[0] == receiveAction.UNDO_PLAYER_DIE) {
 			id = bytesToInt(data[1], data[2]);
-			player = getPlayer(id);
+			player = game_state.getPlayer(id);
 			player.undoDie();
 		}
 		if (data[0] == receiveAction.TEAM_LIFE_COUNT) {
@@ -4198,13 +4251,10 @@ function resetAll() {
 		game_connection.ws.close();
 	}
 	game_connection = null;
-	blocks = [];
-	players = [];
+	game_state.reset();
 	main_canvas.reset();
 	beginScreenVisible = true;
 	updateCmpPersistentLinkVisibility();
-	myPos = null;
-	myRank = 0;
 	scoreStat =
 		scoreStatTarget =
 		realScoreStat =
@@ -4355,16 +4405,15 @@ function skinButton(add, type) {
 
 function updateSkin() {
 	var blockId = parseInt(localStorage.skinColor) + 1;
-	fillArea(
+	skin_screen.state.fillArea(
 		0,
 		0,
 		VIEWPORT_RADIUS * 2,
 		VIEWPORT_RADIUS * 2,
 		blockId,
 		parseInt(localStorage.skinPattern),
-		skin_screen.blocks,
 	);
-	skin_button.blocks[0].setBlockId(blockId);
+	skin_button.block.setBlockId(blockId);
 }
 
 //engagement meter
@@ -4512,25 +4561,6 @@ function checkPatreonQuery() {
 }
 //#endregion
 
-
-/** remove blocks that are too far away from the camera and are likely
- * to be seen without an updated state
- * @param {Vec2} pos
- */
-function removeBlocksOutsideViewport(pos) {
-	for (let i = blocks.length - 1; i >= 0; i--) {
-		const block = blocks[i];
-		if (
-			block.x < pos[0] - VIEWPORT_RADIUS * 2 ||
-			block.x > pos[0] + VIEWPORT_RADIUS * 2 ||
-			block.y < pos[1] - VIEWPORT_RADIUS * 2 ||
-			block.y > pos[1] + VIEWPORT_RADIUS * 2
-		) {
-			blocks.splice(i, 1);
-		}
-	}
-}
-
 //gets color object for a player skin id
 function getColorForBlockSkinId(id) {
 	switch (id) {
@@ -4571,12 +4601,12 @@ function getColorForBlockSkinId(id) {
 
 //updates the stats in the bottom left corner
 function updateStats() {
-	if (myRank > totalPlayers && myRankSent) {
-		totalPlayers = myRank;
-	} else if ((totalPlayers < myRank) || (myRank === 0 && totalPlayers > 0)) {
-		myRank = totalPlayers;
+	if (game_state.my_player.mydata.rank > totalPlayers && myRankSent) {
+		totalPlayers = game_state.my_player.mydata.rank;
+	} else if ((totalPlayers < game_state.my_player.mydata.rank) || (game_state.my_player.mydata.rank === 0 && totalPlayers > 0)) {
+		game_state.my_player.mydata.rank = totalPlayers;
 	}
-	myRankElem.innerHTML = myRank;
+	myRankElem.innerHTML = game_state.my_player.mydata.rank;
 	totalPlayersElem.innerHTML = totalPlayers;
 }
 
@@ -4602,37 +4632,6 @@ function drawTrailOnCtx(drawCalls, trail, lastPos) {
 				thisCtx.lineTo(lastPos[0] * 10 + offset, lastPos[1] * 10 + offset);
 			}
 			thisCtx.stroke();
-		}
-	}
-}
-
-
-
-//fills an area, if array is not specified it defaults to blocks[]
-function fillArea(x, y, w, h, type, pattern, array, isEdgeChunk = false) {
-	var defaultArray = array === undefined;
-	if (defaultArray) {
-		array = blocks;
-	}
-
-	if (pattern === undefined) {
-		pattern = 0;
-	}
-
-	var x2 = x + w;
-	var y2 = y + h;
-	if (myPos !== null && defaultArray) {
-		x = Math.max(x, Math.round(myPos[0]) - VIEWPORT_RADIUS);
-		y = Math.max(y, Math.round(myPos[1]) - VIEWPORT_RADIUS);
-		x2 = Math.min(x2, Math.round(myPos[0]) + VIEWPORT_RADIUS);
-		y2 = Math.min(y2, Math.round(myPos[1]) + VIEWPORT_RADIUS);
-	}
-
-	for (var i = x; i < x2; i++) {
-		for (var j = y; j < y2; j++) {
-			var block = getBlock(i, j, array);
-			var thisType = applyPattern(type, pattern, i, j);
-			block.setBlockId(thisType, isEdgeChunk ? false : Math.random() * 400);
 		}
 	}
 }
@@ -5225,7 +5224,7 @@ function loop(timeStamp) {
 	if (realDeltaTime > lerpedDeltaTime) {
 		lerpedDeltaTime = realDeltaTime;
 	} else {
-		lerpedDeltaTime = lerpt(lerpedDeltaTime, realDeltaTime, 0.05);
+		lerpedDeltaTime = lerpt(lerpedDeltaTime, realDeltaTime, 0.05, deltaTime);
 	}
 
 	if (localStorage.quality == "auto" || localStorage.getItem("quality") === null) {
@@ -5277,14 +5276,14 @@ function loop(timeStamp) {
 			main_canvas.render(timeStamp,deltaTime);
 		}
 		//corner stats
-		scoreStat = lerpt(scoreStat, scoreStatTarget, 0.1);
+		scoreStat = lerpt(scoreStat, scoreStatTarget, 0.1, deltaTime);
 		myScoreElem.innerHTML = Math.round(scoreStat);
-		realScoreStat = lerpt(realScoreStat, realScoreStatTarget, 0.1);
+		realScoreStat = lerpt(realScoreStat, realScoreStatTarget, 0.1, deltaTime);
 		myRealScoreElem.innerHTML = Math.round(realScoreStat);
 
 		//transition canvas
 		if (isTransitioning) {
-			transition_canvas.render();
+			transition_canvas.render(deltaTime);
 		}
 
 		//lives
@@ -5310,12 +5309,12 @@ function loop(timeStamp) {
 
 		//skin button
 		if (beginScreenVisible) {
-			skin_button.render();
+			skin_button.render(deltaTime);
 		}
 
 		//skin screen canvas
 		if (skin_screen.visible) {
-			skin_screen.render();
+			skin_screen.render(deltaTime);
 		}
 
 		//lastStats
@@ -5427,7 +5426,7 @@ function loop(timeStamp) {
 	// console.log(clientSideSetPosPassed, clientSideValidSetPosPassed, serverSideSetPosPassed);
 	if (
 		clientSideValidSetPosPassed > WAIT_FOR_DISCONNECTED_MS &&
-		serverSideSetPosPassed - clientSideSetPosPassed > WAIT_FOR_DISCONNECTED_MS && !myPlayer.isDead
+		serverSideSetPosPassed - clientSideSetPosPassed > WAIT_FOR_DISCONNECTED_MS && !game_state.my_player.isDead
 	) {
 		if (!connectionLostNotification) {
 			connectionLostNotification = doTopNotification(
