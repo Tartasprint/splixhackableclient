@@ -159,6 +159,60 @@ const colors = {
 		bevelBright: "#F9D485",
 	},
 };
+/** gets color object for a player skin id
+ * @param {number} id
+ */
+const getColorForBlockSkinId = id => {
+	switch (id) {
+		case 0:
+			return colors.red;
+		case 1:
+			return colors.red2;
+		case 2:
+			return colors.pink;
+		case 3:
+			return colors.pink2;
+		case 4:
+			return colors.purple;
+		case 5:
+			return colors.blue;
+		case 6:
+			return colors.blue2;
+		case 7:
+			return colors.green;
+		case 8:
+			return colors.green2;
+		case 9:
+			return colors.leaf;
+		case 10:
+			return colors.yellow;
+		case 11:
+			return colors.orange;
+		case 12:
+			return colors.gold;
+		default:
+			return {
+				brighter: "#000000",
+				darker: "#000000",
+				slightlyBrighter: "#000000",
+			};
+	}
+}
+
+/** styles an element with mainColor and edgeColor;
+ * @param {HTMLElement} elem
+ * @param {string} mainColor
+ * @param {string} edgeColor
+ */
+const colorBox = (elem, mainColor, edgeColor) => {
+	elem.style.backgroundColor = mainColor;
+	elem.style.boxShadow = "1px 1px " + edgeColor + "," +
+		"2px 2px " + edgeColor + "," +
+		"3px 3px " + edgeColor + "," +
+		"4px 4px " + edgeColor + "," +
+		"5px 5px " + edgeColor + "," +
+		"10px 30px 80px rgba(0,0,0,0.3)";
+}
 
 const titleLines = [
 	{ //S
@@ -250,6 +304,125 @@ const canvasTransformTypes = Object.freeze({
 	LIFE: 6,
 });
 
+const honkSfx = new Audio("static/honk.mp3");
+
+const filter = str => {
+	str = str.replace(/[卐卍]/g, "❤");
+	const words = str.split(" ");
+	for (let i = 0; i < words.length; i++) {
+		let word = words[i];
+		const wasAllUpper = word.toUpperCase() == word;
+		for (const swear of swearArr) {
+			if (word.toLowerCase().indexOf(swear) >= 0) {
+				if (word.length < swear.length + 2) {
+					word = swearRepl;
+				} else {
+					word = word.toLowerCase().replace(swear, swearRepl);
+				}
+			}
+		}
+		if (wasAllUpper) {
+			word = word.toUpperCase();
+		}
+		words[i] = word;
+	}
+	return words.join(" ");
+}
+const simpleRequest = (url, cb) => {
+	const req = new XMLHttpRequest();
+	req.onreadystatechange = function () {
+		if (req.readyState == XMLHttpRequest.DONE) {
+			if (req.status == 200) {
+				if (cb !== null && cb !== undefined) {
+					cb(req.responseText);
+				}
+			}
+		}
+	};
+	req.open("GET", url, true);
+	req.send();
+};
+
+const swearArr = [];
+simpleRequest("./static/swearList.txt", result => {
+	swearArr.push(...(result.split("\n").filter(n => n)));
+});
+const swearRepl = "balaboo";
+
+const custom_gamepad_mappings = [
+	{
+		name: "Generic USB Joystick", //https://twitter.com/Mat2095/status/765566729812598784
+		buttonMap: {
+			0: 2,
+			1: 1,
+			2: 3,
+			3: 0,
+			4: 4,
+			5: 5,
+			6: 6,
+			7: 7,
+			8: 8,
+			9: 9,
+			10: 10,
+			11: 11,
+			12: 13,
+			13: 14,
+			14: 15,
+			15: 16,
+		},
+		axesMap: { 0: 0, 1: 1, 2: 2, 3: 4 },
+	},
+	{
+		name: "Bluetooth Gamepad", //https://twitter.com/2zqa_MC/status/765933750416994304 https://twitter.com/2zqa_MC/status/765606843339182084
+		buttonMap: {
+			0: 0,
+			1: 1,
+			2: 3,
+			3: 4,
+			4: 6,
+			5: 7,
+			6: 8,
+			7: 9,
+			8: 10,
+			9: 11,
+			10: 13,
+			11: 14,
+			12: 12,
+			13: 13,
+			14: 14,
+			15: 15,
+		},
+		axesMap: { 0: 0, 1: 1, 2: 2, 3: 5 },
+		//12 = axis 9 (-1.0)
+		//13 = axis 9 (0.142857)
+		//14 = axis 9 (0.714286)
+		//15 = axis 9 (-0.428571)
+	},
+	{
+		name: "USB DancePad",
+		buttonMap: {
+			0: 6,
+			1: 7,
+			2: 2,
+			3: 3,
+			4: 4,
+			5: 5,
+			6: 6,
+			7: 7,
+			8: 8,
+			9: 9,
+			10: 10,
+			11: 11,
+			12: 0,
+			13: 1,
+			14: 2,
+			15: 3,
+		},
+		axesMap: { 0: 0, 1: 1, 2: 2, 3: 4 },
+	},
+]
+
+
 //#endregion constants
 
 
@@ -261,6 +434,19 @@ const canvasTransformTypes = Object.freeze({
 
 
 //#region utils
+
+
+
+//http://stackoverflow.com/a/7124052/3625298
+const htmlEscape = str => {
+	return String(str)
+		.replace(/&/g, "&amp;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;");
+}
+
 /** easing functions */ 
 const ease = {
 	in: t => t * t * t * t,
@@ -377,10 +563,10 @@ const smoothLimit = (v) => {
  * @returns {[Vec2,Vec2]}
  */
 const orderTwoPos = (pos1, pos2) => {
-	var x1 = Math.min(pos1[0], pos2[0]);
-	var y1 = Math.min(pos1[1], pos2[1]);
-	var x2 = Math.max(pos1[0], pos2[0]);
-	var y2 = Math.max(pos1[1], pos2[1]);
+	const x1 = Math.min(pos1[0], pos2[0]);
+	const y1 = Math.min(pos1[1], pos2[1]);
+	const x2 = Math.max(pos1[0], pos2[0]);
+	const y2 = Math.max(pos1[1], pos2[1]);
 	return [[x1, y1], [x2, y2]];
 }
 
@@ -389,7 +575,7 @@ const orderTwoPos = (pos1, pos2) => {
  * @returns {number}
  */
 const rndSeed = seed => {
-	var x = Math.sin(seed) * 10000;
+	const x = Math.sin(seed) * 10000;
 	return x - Math.floor(x);
 }
 
@@ -581,16 +767,16 @@ const deviceType = (function () {
 })();
 testHashForMobile();
 
-var patreonQueryWasFound = checkPatreonQuery();
+const patreonQueryWasFound = checkPatreonQuery();
 
 function redirectQuery() {
-	var hashIndex = location.href.indexOf("#");
-	var queryIndex = location.href.indexOf("?");
+	const hashIndex = location.href.indexOf("#");
+	const queryIndex = location.href.indexOf("?");
 	if ((queryIndex >= 0 && (hashIndex == -1 || queryIndex < hashIndex)) || isIframe()) {
 		if (!patreonQueryWasFound || isIframe()) {
-			var allowedSearchParams = ["gp", "siteId", "channelId", "siteLocale", "storageId"];
-			var query = parseQuery(location.href);
-			for (var key in query) {
+			const allowedSearchParams = ["gp", "siteId", "channelId", "siteLocale", "storageId"];
+			const query = parseQuery(location.href);
+			for (const key in query) {
 				if (query.hasOwnProperty(key)) {
 					if (allowedSearchParams.indexOf(key) == -1) {
 						delete query[key];
@@ -606,15 +792,15 @@ function redirectQuery() {
 				query["storageId"] = "72167631167";
 			}
 
-			var queryArr = [];
-			for (var key in query) {
+			const queryArr = [];
+			for (const key in query) {
 				if (query.hasOwnProperty(key)) {
 					queryArr.push(window.encodeURIComponent(key) + "=" + window.encodeURIComponent(query[key]));
 				}
 			}
-			var queryString = queryArr.join("&");
+			const queryString = queryArr.join("&");
 			if (queryString) queryString = "?" + queryString;
-			var newLocation = location.href.split("?")[0] + queryString;
+			const newLocation = location.href.split("?")[0] + queryString;
 			if (newLocation != location.href) {
 				location.href = newLocation;
 			}
@@ -636,48 +822,28 @@ function addSocketWrapper() {
 		return;
 	}
 
-	var simulatedLatency = parseInt(localStorage.simulatedLatency) / 2;
+	const simulatedLatency = parseInt(localStorage.simulatedLatency) / 2;
 	if (simulatedLatency > 0) {
 		const RealWebSocket = WebSocket;
 		const WrappedWebSocket = function (url) {
-			var websocket = new RealWebSocket(url);
+			const websocket = new RealWebSocket(url);
 			websocket.binaryType = "arraybuffer";
 
 			this.onclose = function () {};
 			this.onopen = function () {};
 			this.onmessage = function () {};
 
-			var me = this;
-			websocket.onclose = function () {
-				window.setTimeout(function () {
-					me.onclose();
-				}, simulatedLatency);
-			};
-			websocket.onopen = function () {
-				window.setTimeout(function () {
-					me.onopen();
-				}, simulatedLatency);
-			};
-			websocket.onmessage = function (data) {
-				window.setTimeout(function () {
-					me.onmessage(data);
-				}, simulatedLatency);
-			};
-			this.send = function (data) {
-				window.setTimeout(function () {
-					websocket.send(data);
-				}, simulatedLatency);
-			};
-			this.close = function () {
-				window.setTimeout(function () {
-					websocket.close();
-				}, simulatedLatency);
-			};
+			const me = this;
+			websocket.onclose = () => window.setTimeout(() => me.onclose(), simulatedLatency);
+			websocket.onopen = () => window.setTimeout(() => me.onopen(), simulatedLatency);
+			websocket.onmessage = (data) => window.setTimeout(() => me.onmessage(data), simulatedLatency);
+			this.send = (data) => window.setTimeout(() => websocket.send(data), simulatedLatency);
+			this.close = () => window.setTimeout(() => websocket.close(), simulatedLatency);
 		};
 		window.WebSocket = WrappedWebSocket.bind();
 	}
 }
-addSocketWrapper();
+addSocketWrapper(); // TODO Unwrap WebSocket ?
 
 class Stats {
 	blocks = 0;
@@ -841,7 +1007,7 @@ class SplixBaseCamera extends SplixBaseCanvas {
 			}
 			xOffset += offset % spaceBetween;
 			for (let i = -minSize; i < minSize; i += spaceBetween) {
-				var thisXOffset = xOffset + i;
+				const thisXOffset = xOffset + i;
 				ctx.beginPath();
 				ctx.moveTo(thisXOffset, yOffset);
 				ctx.lineTo(thisXOffset + minSize, yOffset + minSize);
@@ -1433,15 +1599,7 @@ class SplixCanvas extends SplixBaseCamera {
 		}
 
 		//change dir queue
-		if (sendDirQueue.length > 0) {
-			var thisDir = sendDirQueue[0];
-			if (
-				Date.now() - thisDir.addTime > 1.2 / GLOBAL_SPEED || // older than '1.2 blocks travel time'
-				sendDir(thisDir.dir, true) // senddir call was successful
-			) {
-				sendDirQueue.shift(); //remove item
-			}
-		}
+		game_connection.render();
 
 		if (!uglyMode) {
 			this.drawDiagonalLines(this.linesCtx, "white", 5, 10, timeStamp * 0.008);
@@ -1522,39 +1680,6 @@ class SplixCanvas extends SplixBaseCamera {
 	}
 }
 
-class MinimapCanvas {
-	constructor(canvas){
-		if(canvas === undefined){
-			canvas = document.createElement('canvas');
-		}
-		this.canvas = canvas;
-		this.ctx = this.canvas.getContext("2d");
-	}
-
-	update(data){
-		const part = data[1];
-		const xOffset = part * 20;
-		this.ctx.clearRect(xOffset * 2, 0, 40, 160);
-		this.ctx.fillStyle = "#000000";
-		for (let i = 1; i < data.length; i++) {
-			for (let j = 0; j < 8; j++) {
-				const filled = (data[i] & (1 << j)) !== 0;
-				if (filled) {
-					const bitNumber = (i - 2) * 8 + j;
-					const x = Math.floor(bitNumber / 80) % 80 + xOffset;
-					const y = bitNumber % 80;
-					this.ctx.fillRect(x * 2, y * 2, 2, 2);
-				}
-			}
-		}
-	}
-
-	reset(){
-		this.ctx.clearRect(0, 0, 160, 160);
-	}
-
-}
-
 class SplixLogoCanvas extends SplixBaseCanvas {
 	timer = -1;
 	resetNextFrame = true;
@@ -1575,7 +1700,7 @@ class SplixLogoCanvas extends SplixBaseCanvas {
 	}
 
 	get styleRatio(){
-		return Math.min(1, (window.innerWidth - 30) / w)
+		return Math.min(1, (window.innerWidth - 30) / this.w)
 	}
 	
 	/**
@@ -1962,13 +2087,13 @@ class LifeCanvas extends SplixBaseCanvas {
 			if (this.animDir == 1) {
 				this.ctx.fillStyle = colors.red.darker;
 				this.ctx.translate(30, 30);
-				var s = this.timer;
+				let s = this.timer;
 				if (s < 0.8) {
 					s = lerp(0, 1.2, ease.in(iLerp(0, 0.8, s)));
 				} else {
 					s = lerp(1.2, 1, ease.in(iLerp(0.8, 1, s)));
 				}
-				var r = (1 - s) * 0.5;
+				const r = (1 - s) * 0.5;
 				this.ctx.rotate(r);
 				this.ctx.scale(s, s);
 				this.ctx.translate(-30, -30);
@@ -2326,6 +2451,51 @@ class SkinButtonCanvas extends SplixBaseCamera {
 
 }
 
+
+class Minimap {
+	/** @type {HTMLCanvasElement} */
+	canvas;
+	/** @type {CanvasRenderingContext2D} */
+	ctx;
+	/** @type {HTMLElement} */
+	player;
+	/** @type {number?} */
+	constructor(canvas,player){
+		this.canvas = canvas;
+		this.ctx = this.canvas.getContext("2d");
+		this.player = player
+	}
+
+	update_map(data){
+		const part = data[1];
+		const xOffset = part * 20;
+		this.ctx.clearRect(xOffset * 2, 0, 40, 160);
+		this.ctx.fillStyle = "#000000";
+		for (let i = 1; i < data.length; i++) {
+			for (let j = 0; j < 8; j++) {
+				const filled = (data[i] & (1 << j)) !== 0;
+				if (filled) {
+					const bitNumber = (i - 2) * 8 + j;
+					const x = Math.floor(bitNumber / 80) % 80 + xOffset;
+					const y = bitNumber % 80;
+					this.ctx.fillRect(x * 2, y * 2, 2, 2);
+				}
+			}
+		}
+	}
+
+	update_player(pos){
+		this.player.style.left = (pos[0] / game_state.map_size * 160 + 1.5) + "px";
+		this.player.style.top = (pos[1] / game_state.map_size * 160 + 1.5) + "px";
+	}
+
+	reset(){
+		this.ctx.clearRect(0, 0, 160, 160);
+	}
+
+}
+
+
 class SkinScreen extends SplixBaseCamera {
 	canvasTransformType = canvasTransformTypes.SKIN;
 	state = new SplixState();
@@ -2347,6 +2517,56 @@ class SkinScreen extends SplixBaseCamera {
 		}
 		currentPattern = parseInt(currentPattern);
 		this.state.fillArea(0, 0, VIEWPORT_RADIUS * 2, VIEWPORT_RADIUS * 2, currentColor + 1, currentPattern);
+
+		//called when a skinbutton is pressed
+		//add = -1 or 1 (increment/decrement)
+		//type = 0 (color) or 1 (pattern)
+		const skinButton = (add, type) => {
+			if (type === 0) {
+				let oldC = localStorage.getItem("skinColor");
+				const hiddenCs = [];
+				if (localStorage.patreonLastPledgedValue >= 300) {
+					//access to patreon color
+				} else {
+					hiddenCs.push(13);
+				}
+				if (oldC === null) {
+					oldC = 0;
+				}
+				oldC = parseInt(oldC);
+				let cFound = false;
+				while (!cFound) {
+					oldC += add;
+					oldC = mod(oldC, SKIN_BLOCK_COUNT + 1);
+					if (hiddenCs.indexOf(oldC) < 0) {
+						cFound = true;
+					}
+				}
+				lsSet("skinColor", oldC);
+			} else if (type == 1) {
+				let oldP = localStorage.getItem("skinPattern");
+				const hiddenPs = [18, 19, 20, 21, 23, 24, 25, 26];
+				if (localStorage.patreonLastPledgedValue > 0) {
+					//access to patreon pattern
+				} else {
+					hiddenPs.push(27);
+				}
+				if (oldP === null) {
+					oldP = 0;
+				}
+				oldP = parseInt(oldP);
+				let pFound = false;
+				while (!pFound) {
+					oldP += add;
+					oldP = mod(oldP, SKIN_PATTERN_COUNT);
+					if (hiddenPs.indexOf(oldP) < 0) {
+						pFound = true;
+					}
+				}
+				lsSet("skinPattern", oldP);
+			}
+			updateSkin();
+		}
 	
 		document.getElementById("prevColor").addEventListener('click', () => {
 			skinButton(-1, 0);
@@ -2437,6 +2657,630 @@ class LifeBox {
 	}
 }
 
+
+class TopNotification {
+	/** @type {string} */
+	text;
+	/** @type {HTMLElement} */
+	elem = null;
+	/** @type {number} */
+	animationTimer = 0;
+	/** @type {number} */
+	animationDirection = 1;
+	/** @type {Set<TopNotification>} */
+	static current_notifications = new Set();
+	/**
+	 * @param {string} text 
+	 * @param {TopNotification} manager 
+	 */
+	constructor(text){
+		this.text = text;
+		const el = document.createElement("div");
+		this.elem = el;
+		el.innerHTML = this.text;
+		el.classList.add("topNotification", "greenBox");
+		el.style.visibility = "hidden";
+		document.getElementById("topNotifications").appendChild(el);
+		const c = getColorForBlockSkinId(game_state.my_player?.skinBlock ?? -1);
+		const mainColor = c.brighter;
+		const edgeColor = c.darker;
+		colorBox(el, mainColor, edgeColor);
+		TopNotification.current_notifications.add(this);
+	}
+
+	static update_all(deltaTime) {
+		for (const n of TopNotification.current_notifications) {
+			n.update(deltaTime);
+		}
+	}
+
+	static reset_all(){
+		for(const n of TopNotification.current_notifications){
+			n.destroy();
+		}
+		TopNotification.current_notifications.clear();
+	}
+
+	update(deltaTime){
+		this.animationTimer += deltaTime * 0.001 * this.animationDirection;
+		const hiddenPos = -this.elem.offsetHeight - 10;
+		const topPos = lerp(hiddenPos, 10, ease.out(clamp01(this.animationTimer)));
+		this.elem.style.top = topPos + "px";
+		this.elem.style.visibility = null;
+		//if return true, destroy notification object
+		if (this.animationDirection == -1 && this.animationTimer < 0) {
+			this.destroy();
+		}
+	}
+
+	animateOut() {
+		this.animationDirection = -1;
+		if (this.animationTimer > 1) {
+			this.animationTimer = 1;
+		}
+	}
+
+	destroy() {
+		this.elem.parentElement.removeChild(this.elem);
+		TopNotification.current_notifications.delete(this);
+	}
+}
+
+class QualityUI {
+	/** @type {HTMLElement} */
+	element;
+
+	constructor(element){
+		this.element = element;
+		element.addEventListener('click',()=>this.toggle());
+		this.set();
+	}
+	set(){
+		if (localStorage.getItem("quality") === null) {
+			lsSet("quality", "1");
+		}
+		if (localStorage.quality != "auto") {
+			canvasQuality = parseFloat(localStorage.quality);
+			this.element.innerHTML = "Quality: " + {
+				"0.4": "low",
+				"0.7": "medium",
+				"1": "high",
+			}[localStorage.quality];
+		} else {
+			this.element.innerHTML = "Quality: auto";
+		}
+	}
+
+	toggle(){
+		switch (localStorage.quality) {
+			case "auto":
+				lsSet("quality", "0.4");
+				break;
+			case "0.4":
+				lsSet("quality", "0.7");
+				break;
+			case "0.7":
+				lsSet("quality", "1");
+				break;
+			case "1":
+				lsSet("quality", "auto");
+				break;
+		}
+		this.set();
+	}
+}
+
+class UglyUI {
+	element;
+	constructor(element){
+		this.element = element;
+		element.addEventListener('click',()=>this.toggle());
+		this.set();
+	}
+	set(){
+		updateUglyMode();
+		const onOff = uglyMode ? "on" : "off";
+		this.element.innerHTML = "Ugly mode: " + onOff;
+	}
+
+	toggle(){
+		window.hc.flags.toggle('uglyMode');
+	}
+}
+
+class InputHanlder {
+	//Honk
+	honkStartTime = undefined;
+	lastHonkTime = 0;
+	
+	//Mouse/Pointer
+	lastMousePos = [0, 0];
+	mouseHidePos = [0, 0];
+
+	// Touch stuffs
+	current_touches = new Map();
+	/** @type {HTMLElement} */
+	touchcontrol_elem;
+
+	// Keyboard
+	pressed_keys = [];
+
+	// Game pad
+	current_gamepad;
+	current_gamepad_map = {
+		buttonMap: {
+			0: 0,
+			1: 1,
+			2: 2,
+			3: 3,
+			4: 4,
+			5: 5,
+			6: 6,
+			7: 7,
+			8: 8,
+			9: 9,
+			10: 10,
+			11: 11,
+			12: 12,
+			13: 13,
+			14: 14,
+			15: 15,
+		},
+		axesMap: { 0: 0, 1: 1, 2: 2, 3: 3 },
+	};
+	gamepad_is_honking = false;
+	
+	constructor(touchcontrol_elem){
+		//Blur
+		window.addEventListener("blur", function (event) {
+			this.pressedKeys = [];
+		}, false);
+
+		// Mouse/pointer
+		window.addEventListener("click", showCursor);
+		window.addEventListener("mousemove", (e) => {
+			this.lastMousePos = [e.screenX, e.screenY];
+			const distX = this.lastMousePos[0] - this.mouseHidePos[0];
+			const distY = this.lastMousePos[1] - this.mouseHidePos[1];
+			const dist = Math.sqrt(Math.pow(distX, 2) + Math.pow(distY, 2));
+			if (dist > 15) {
+				showCursor();
+			}
+		});
+		window.addEventListener("contextmenu", e => {
+			if (e.target.nodeName.toLowerCase() == "embed") {
+				return true;
+			} else {
+				e.preventDefault();
+				return false;
+			}
+		});
+
+		// Swipe events
+		this.touchcontrol_elem = touchcontrol_elem;
+		touchcontrol_elem.addEventListener('touchstart', e => {
+			let touch = e.touches[e.touches.length - 1];
+			this.current_touches.set(touch.identifier,{
+				prevPos: [touch.pageX, touch.pageY],
+				prevTime: Date.now(),
+				id: touch.identifier,
+			});
+		});
+		touchcontrol_elem.addEventListener('touchmove', e => {
+			for (const touch of e.touches) {
+				const currentTouch = this.current_touches.get(touch.identifier);
+				if (currentTouch) {
+					calcTouch(currentTouch, touch);
+				}
+			}
+			e.preventDefault();
+		});
+		const touch_end = e => {
+			for (const touch of e.touches) {
+				const  current_touch = this.current_touches.get(touch.identifier);
+				if(current_touch){
+					calcTouch(current_touch, touch);
+					this.current_touches.delete(current_touch.id);
+				}
+			}
+		};
+		touchcontrol_elem.addEventListener('touchend', touch_end);
+		touchcontrol_elem.addEventListener('touchcancel', touch_end);
+	}
+
+	honkStart() {
+		if(this.honkStartTime === undefined){
+			this.honkStartTime = Date.now();
+		}
+	}
+
+	honkEnd() {
+		const now = Date.now();
+		if (now > this.lastHonkTime && this.honkStartTime !== undefined) {
+			let time = now - this.honkStartTime;
+			time = clamp(time, 0, 1000);
+			this.lastHonkTime = now + time;
+			this.honkStartTime = undefined;
+			time = iLerp(0, 1000, time);
+			time *= 255;
+			time = Math.floor(time);
+			game_connection.wsSendMsg(sendAction.HONK, time);
+			game_state.my_player?.doHonk(Math.max(70, time));
+		}
+	}
+
+	parse_gamepads(){
+		if ("getGamepads" in navigator) {
+			const gamepads = navigator.getGamepads();
+			let honkButtonPressedAnyPad = false;
+			for (let i = 0; i < gamepads.length; i++) {
+				this.current_gamepad = gamepads[i];
+				if (this.current_gamepad !== undefined && this.current_gamepad !== null) {
+					let validGamepad = false;
+					if (this.current_gamepad.mapping == "standard") {
+						this.current_gamepad_map = {
+							buttonMap: {
+								0: 0,
+								1: 1,
+								2: 2,
+								3: 3,
+								4: 4,
+								5: 5,
+								6: 6,
+								7: 7,
+								8: 8,
+								9: 9,
+								10: 10,
+								11: 11,
+								12: 12,
+								13: 13,
+								14: 14,
+								15: 15,
+							},
+							axesMap: { 0: 0, 1: 1, 2: 2, 3: 3 },
+						};
+						validGamepad = true;
+					} else {
+						for (const custom_mapping of custom_gamepad_mappings) {
+							if (this.current_gamepad.id.indexOf(custom_mapping.name) >= 0) {
+								validGamepad = true;
+								this.current_gamepad_map = custom_mapping;
+							}
+						}
+					}
+					if (validGamepad) {
+						if (this.get_current_gamepad_button(12)) { //up
+							sendDir(3);
+						}
+						if (this.get_current_gamepad_button(13)) { //down
+							sendDir(1);
+						}
+						if (this.get_current_gamepad_button(14)) { //left
+							sendDir(2);
+						}
+						if (this.get_current_gamepad_button(15)) { //right
+							sendDir(0);
+						}
+						if (this.get_current_gamepad_button(0)) { // X / A
+							honkButtonPressedAnyPad = true;
+						}
+						if (this.get_current_gamepad_button(1)) { // O / B
+							doSkipDeathTransition();
+						}
+						if (this.get_current_gamepad_button(9)) { // pause
+							sendDir(4);
+						}
+						if (this.get_current_gamepad_axis(0) < -0.9 || this.get_current_gamepad_axis(2) < -0.9) { //left
+							sendDir(2);
+						}
+						if (this.get_current_gamepad_axis(0) > 0.9 || this.get_current_gamepad_axis(2) > 0.9) { //right
+							sendDir(0);
+						}
+						if (this.get_current_gamepad_axis(1) < -0.9 || this.get_current_gamepad_axis(3) < -0.9) { //up
+							sendDir(3);
+						}
+						if (this.get_current_gamepad_axis(1) > 0.9 || this.get_current_gamepad_axis(3) > 0.9) { //down
+							sendDir(1);
+						}
+					}
+				}
+			}
+	
+			if (honkButtonPressedAnyPad) { // X / A
+				if (beginScreenVisible) {
+					connectWithTransition();
+				} else if (!this.gamepad_is_honking) {
+					this.gamepad_is_honking = true;
+					input_handler.honkStart();
+				}
+			} else {
+				if (this.gamepad_is_honking) {
+					this.gamepad_is_honking = false;
+					input_handler.honkEnd();
+				}
+			}
+		}
+	}
+
+	get_current_gamepad_button(id){
+		if (this.current_gamepad) {
+			if (this.current_gamepad.buttons) {
+				const button = this.current_gamepad.buttons[this.current_gamepad_map.buttonMap[id]];
+				if (button) {
+					return button.pressed;
+				}
+			}
+		}
+		return false;
+	}
+
+	get_current_gamepad_axis(id){
+		if (this.current_gamepad) {
+			if (this.current_gamepad.axes) {
+				const axis = this.current_gamepad.axes[this.current_gamepad_map.axesMap[id]];
+				if (axis !== undefined) {
+					return axis;
+				}
+			}
+		}
+		return 0;
+	}
+}
+
+//#region Main loop
+class RenderingLoop {
+	prevTimeStamp = null;
+	currentDtCap = 0;
+	totalDeltaTimeFromCap = 0;
+	deltaTime = 16.66;
+	lerpedDeltaTime = 16.66;
+	missedFrames = [];
+	gainedFrames = [];
+	constructor(){}
+	loop(timeStamp) {
+		debugging.frames += 1;
+		if(timeStamp - debugging.time_start > 1_000) debugging.time_start = timeStamp;
+
+		const realDeltaTime = timeStamp - this.prevTimeStamp;
+		if (realDeltaTime > this.lerpedDeltaTime) {
+			this.lerpedDeltaTime = realDeltaTime;
+		} else {
+			this.lerpedDeltaTime = lerpt(this.lerpedDeltaTime, realDeltaTime, 0.05, this.deltaTime);
+		}
+
+		if (localStorage.quality == "auto" || localStorage.getItem("quality") === null) {
+			if (this.lerpedDeltaTime > 33) {
+				canvasQuality -= 0.01;
+			} else if (this.lerpedDeltaTime < 28) {
+				canvasQuality += 0.01;
+			}
+			canvasQuality = Math.min(1, Math.max(0.4, canvasQuality));
+		}
+
+		if (realDeltaTime < lerp(getDtCap(this.currentDtCap), getDtCap(this.currentDtCap - 1), 0.9)) {
+			this.gainedFrames.push(Date.now());
+			while (this.gainedFrames.length > 190) {
+				if (Date.now() - this.gainedFrames[0] > 10000) {
+					this.gainedFrames.splice(0, 1);
+				} else {
+					this.currentDtCap--;
+					this.gainedFrames = [];
+					this.currentDtCap = clamp(this.currentDtCap, 0, dtCaps.length - 1);
+					break;
+				}
+			}
+		}
+
+		if (realDeltaTime > lerp(getDtCap(this.currentDtCap), getDtCap(this.currentDtCap + 1), 0.05)) {
+			this.missedFrames.push(Date.now());
+			this.gainedFrames = [];
+			while (this.missedFrames.length > 5) {
+				if (Date.now() - this.missedFrames[0] > 5000) {
+					this.missedFrames.splice(0, 1);
+				} else {
+					this.currentDtCap++;
+					this.missedFrames = [];
+					this.currentDtCap = clamp(this.currentDtCap, 0, dtCaps.length - 1);
+					break;
+				}
+			}
+		}
+
+		this.deltaTime = realDeltaTime + this.totalDeltaTimeFromCap;
+		this.prevTimeStamp = timeStamp;
+		if (this.deltaTime < getDtCap(this.currentDtCap) && localStorage.dontCapFps != "true") {
+			this.totalDeltaTimeFromCap += realDeltaTime;
+		} else {
+			this.totalDeltaTimeFromCap = 0;
+			//main canvas
+			if(playingAndReady){
+				main_canvas.render(timeStamp,this.deltaTime);
+			}
+			//corner stats
+			scoreStat = lerpt(scoreStat, scoreStatTarget, 0.1, this.deltaTime);
+			myScoreElem.innerHTML = Math.round(scoreStat);
+			realScoreStat = lerpt(realScoreStat, realScoreStatTarget, 0.1, this.deltaTime);
+			myRealScoreElem.innerHTML = Math.round(realScoreStat);
+
+			//transition canvas
+			if (isTransitioning) {
+				transition_canvas.render(this.deltaTime);
+			}
+
+			//lives
+			life_box.renderAllLives(this.deltaTime);
+
+			//top notification
+			TopNotification.update_all(this.deltaTime)
+
+			engagement.set_is_playing(playingAndReady && (Date.now() - (game_connection?.lastSendDirTime ?? 0)) < 20000);
+
+			//title
+			if (beginScreenVisible && timeStamp - title_canvas.lastRender > 49) {
+				title_canvas.render(timeStamp);
+			}
+
+			//tutorial canvas
+			if (beginScreenVisible) {
+				tutorial.render(timeStamp,this.deltaTime);
+			}
+
+			//skin button
+			if (beginScreenVisible) {
+				skin_button.render(this.deltaTime);
+			}
+
+			//skin screen canvas
+			if (skin_screen.visible) {
+				skin_screen.render(this.deltaTime);
+			}
+
+			//lastStats
+			if (beginScreenVisible) {
+				lastStatTimer += this.deltaTime;
+				const t = lastStatTimer / 2000;
+				if (t > 1) {
+					lastStatTimer = 0;
+					lastStatCounter++;
+					if (lastStatCounter > 5) {
+						lastStatCounter = 0;
+					}
+
+					if (lastStatCounter === 0) {
+						if (lastStat.no1_time <= 0 && bestStat.no1_time <= 0) {
+							lastStatCounter++;
+						} else {
+							lastStatValueElem.innerHTML = parseTimeToString(lastStat.no1_time) + " on #1";
+							bestStatValueElem.innerHTML = parseTimeToString(bestStat.no1_time) + " on #1";
+						}
+					}
+					if (lastStatCounter == 1) {
+						if (lastStatKiller === "" && lastStatKiller.replace(/\s/g, "").length > 0) {
+							lastStatCounter++;
+						} else {
+							lastStatValueElem.innerHTML = "killed by " + filter(htmlEscape(lastStatKiller));
+							bestStatValueElem.innerHTML = "";
+						}
+					}
+					if (lastStatCounter == 2) {
+						if (lastStat.kills <= 0 && bestStat.kills <= 0) {
+							lastStatCounter++;
+						} else {
+							const killsS = lastStat.kills == 1 ? "" : "s";
+							lastStatValueElem.innerHTML = lastStat.kills + " player" + killsS + " killed";
+							const killsS2 = bestStat.kills == 1 ? "" : "s";
+							bestStatValueElem.innerHTML = bestStat.kills + " player" + killsS2 + " killed";
+						}
+					}
+					if (lastStatCounter == 3) {
+						lastStatValueElem.innerHTML = parseTimeToString(lastStat.alive) + " alive";
+						bestStatValueElem.innerHTML =
+							parseTimeToString(Math.max(lastStat.alive, localStorage.getItem("bestStatAlive"))) + " alive";
+					}
+					if (lastStatCounter == 4) {
+						if (lastStat.blocks <= 0 && bestStat.blocks <= 0) {
+							lastStatCounter++;
+						} else {
+							const blockS = lastStat.blocks == 1 ? "" : "s";
+							lastStatValueElem.innerHTML = lastStat.blocks + " block" + blockS + " captured";
+							const blockS2 = bestStat.blocks == 1 ? "" : "s";
+							bestStatValueElem.innerHTML = bestStat.blocks + " block" + blockS2 + " captured";
+						}
+					}
+					if (lastStatCounter == 5) {
+						if (lastStat.leaderboard_rank <= 0 && bestStat.leaderboard_rank <= 0) {
+							lastStatCounter = 0;
+						} else {
+							lastStatValueElem.innerHTML = lastStat.leaderboard_rank == 0 ? "" : "#" + lastStat.leaderboard_rank + " highest rank";
+							bestStatValueElem.innerHTML = bestStat.leaderboard_rank == 0 ? "" : "#" + bestStat.leaderboard_rank + " highest rank";
+						}
+					}
+				}
+				const speed = 5;
+				lastStatValueElem.style.opacity = bestStatValueElem.style.opacity = speed - Math.abs((t - 0.5) * speed * 2);
+			}
+
+			if (beginScreenVisible) {
+				if (Date.now() - lastNameChangeCheck > 1000) {
+					if (lastNameValue != nameInput.value) {
+						nameInputOnChange();
+						lastNameValue = nameInput.value;
+					}
+					lastNameChangeCheck = Date.now();
+				}
+			}
+
+			//debug info (red ping stats)
+			if (localStorage.drawDebug == "true") {
+				if(game_connection !== null){
+					const avg = Math.round(game_connection.serverAvgPing);
+					const last = Math.round(game_connection.serverLastPing);
+					const diff = Math.round(game_connection.serverDiffPing);
+					const str = "avg:" + avg + " last:" + last + " diff:" + diff + " fps:" + Math.round(debugging.getFPS());
+					main_canvas.ctx.font = "14px Arial, Helvetica, sans-serif";
+					main_canvas.ctx.fillStyle = colors.red.brighter;
+					const textWidth = main_canvas.ctx.measureText(str).width;
+					main_canvas.ctx.fillText(str, main_canvas.canvas.width - textWidth - 10, main_canvas.canvas.height - 10);
+				}
+			}
+
+			//ping overload test
+			// if(Date.now() - lastPingOverloadTestTime > 10000){
+			// 	lastPingOverloadTestTime = Date.now();
+			// 	if(pingOverLoadWs !== null && pingOverLoadWs.readyState == WebSocket.OPEN){
+			// 		pingOverLoadWs.close();
+			// 	}
+			// 	pingOverLoadWs = new WebSocket("ws://37.139.24.137:7999/overloadTest");
+			// 	pingOverLoadWs.onopen = function(){
+			// 		pingOverLoadWs.send(new Uint8Array([0]));
+			// 	};
+			// }
+		}
+
+		// if my position confirmation took too long
+		const clientSideSetPosPassed = Date.now() - lastMyPosSetClientSideTime;
+		const clientSideValidSetPosPassed = Date.now() - lastMyPosSetValidClientSideTime;
+		const serverSideSetPosPassed = Date.now() - lastMyPosServerSideTime;
+		// console.log(clientSideSetPosPassed, clientSideValidSetPosPassed, serverSideSetPosPassed);
+		if (
+			clientSideValidSetPosPassed > WAIT_FOR_DISCONNECTED_MS &&
+			serverSideSetPosPassed - clientSideSetPosPassed > WAIT_FOR_DISCONNECTED_MS && !game_state.my_player.isDead
+		) {
+			if (!connectionLostNotification) {
+				connectionLostNotification = new TopNotification(
+					"It seems like you're disconnected. Please check your connection.",
+				);
+			}
+		} else {
+			if (connectionLostNotification) {
+				connectionLostNotification.animateOut();
+				connectionLostNotification = null;
+			}
+		}
+
+		if(game_connection !== null){
+			const maxPingTime = game_connection.waitingForPing ? 10000 : 5000;
+			if (Date.now() - game_connection.lastPingTime > maxPingTime) {
+				game_connection.lastPingTime = Date.now();
+				if (game_connection.wsSendMsg(sendAction.PING)) {
+					game_connection.waitingForPing = true;
+				}
+			}
+		}
+
+		// if(window.innerWidth != prevWindowWidth || window.innerHeight != prevWindowHeight){
+		// 	prevWindowWidth = window.innerWidth;
+		// 	prevWindowHeight = window.innerHeight;
+		// 	onResize(prevWindowWidth, prevWindowHeight);
+		// }
+
+		input_handler.parse_gamepads();
+
+		window.requestAnimationFrame((timeStamp)=>{this.loop(timeStamp)});
+	}
+}
+//#endregion
+
 class Block {
 	currentBlock = -1;
 	nextBlock =  -1;
@@ -2498,11 +3342,16 @@ class SplixState {
 	players = new Map();
 	/** @type {Player?} */
 	my_player = null;
+	/** @type {number} */
+	map_size = 2000;
+	/** @type {number} */
+	total_players = 0;
 
 	reset(){
 		this.blocks = new Map();
 		this.players = new Map();
 		this.my_player.mydata.reset();
+		this.total_players = 0;
 	}
 	/**
 	 * Gets the block at the (x,y) coordinates. If it does not exist, one
@@ -2582,315 +3431,6 @@ class SplixState {
 
 }
 
-
-// Some dated code is using these in places like `for(i = 0`.
-// While ideally these variables should all be made local,
-// I'm worried some locations actually rely on them not being local.
-// So for now these are all global, but we should slowly try to get rid of these.
-var i, w;
-
-const IS_SECURE = location.protocol.indexOf("https") >= 0;
-const SECURE_WS = IS_SECURE ? "wss://" : "ws://";
-/** @type {SplixCanvas} main ctx */
-let main_canvas;
-
-let game_state = new SplixState();
-var prevTimeStamp = null;
-var /** @type {Player} */
-	changeDirAt = null,
-	changeDirAtIsHorizontal = false,
-	lastChangedDirPos = null;
-var lastClientsideMoves = [],
-	isRequestingMyTrail = false,
-	skipTrailRequestResponse = false;
-var mapSize = 2000, closedBecauseOfDeath = false, beginScreenVisible = true, wsOnOpenTime;
-var canvasQuality = 1,
-currentDtCap = 0,
-	totalDeltaTimeFromCap = 0,
-	deltaTime = 16.66,
-	lerpedDeltaTime = 16.66,
-	missedFrames = [],
-	gainedFrames = [];
-	var myScoreElem,
-	myKillsElem,
-	myRealScoreElem,
-	myRankElem,
-	myRankSent = false,
-	totalPlayersElem,
-	totalPlayers = 0;
-var leaderboardElem, leaderboardDivElem, leaderboardHidden = localStorage.leaderboardHidden == "true";
-var miniMapPlayer,
-	playUI,
-	beginScreen,
-	notificationElem,
-	formElem,
-	nameInput,
-	lastNameValue = "",
-	lastNameChangeCheck = 0;
-var scoreStatTarget = 25, scoreStat = 25, realScoreStatTarget = 25, realScoreStat = 25;
-var showCouldntConnectAfterTransition = false, playingAndReady = false, canRunAds = false;
-var isTransitioning = false;
-var touchControlsElem;
-/**@type {MinimapCanvas} */
-let minimap_canvas;
-/** @type {TransitionCanvas} */
-let transition_canvas;
-/** @type {TutorialCanvas} */
-let tutorial;
-/** @type {SkinButtonCanvas} */
-let skin_button;
-/** @type {SkinScreen} */
-let skin_screen;
-/** @type {SplixLogoCanvas} Canvas for splix animated logo */ 
-let title_canvas;
-/** @type {LifeBox} */
-let life_box;
-var currentTouches = [], doRefreshAfterDie = false, pressedKeys = [];
-var honkStartTime = undefined, lastHonkTime = 0, honkSfx = null;
-var skipDeathTransition = false, allowSkipDeathTransition = false, deathTransitionTimeout = null;
-var closeNotification = null, connectionLostNotification = null;
-var lastMyPosSetClientSideTime = 0,
-	lastMyPosServerSideTime = 0,
-	lastMyPosSetValidClientSideTime = 0,
-	lastMyPosHasBeenConfirmed = false;
-var uiElems = [], zoom, myColorId, uglyMode = false;
-var hasReceivedChunkThisGame = false, didSendSecondReady = false;
-let lastStat = new Stats();
-let lastStatDeathType = 0,
-	lastStatKiller = "";
-let bestStat = new Stats();
-var bestStatBlocks = 0, bestStatKills = 0, bestStatLbRank = 0, bestStatAlive = 0, bestStatNo1Time = 0;
-var lastStatTimer = 0, lastStatCounter = 0, lastStatValueElem, bestStatValueElem;
-var lastMousePos = [0, 0], mouseHidePos = [0, 0];
-var joinButton,
-	gamemodeDropDownEl;
-var didConfirmOpenInApp = false;
-let debugging = {
-	frames: 0,
-	time_start: 0,
-	getFPS: () => {
-		return debugging.frames*1000/(Date.now()-debugging.time_start)
-	},
-}
-
-//called by form, connects with transition and error handling
-var isConnectingWithTransition = false;
-
-/**@type {GameConnection?} */
-let game_connection = null;
-
-
-
-function simpleRequest(url, cb) {
-	var req = new XMLHttpRequest();
-	req.onreadystatechange = function () {
-		if (req.readyState == XMLHttpRequest.DONE) {
-			if (req.status == 200) {
-				if (cb !== null && cb !== undefined) {
-					cb(req.responseText);
-				}
-			}
-		}
-	};
-	req.open("GET", url, true);
-	req.send();
-}
-
-function countPlayGame() {
-	var old = 0;
-	if (localStorage.getItem("totalGamesPlayed") !== null) {
-		old = localStorage.totalGamesPlayed;
-	}
-	old++;
-	lsSet("totalGamesPlayed", old);
-}
-
-function generateServerLocation(originalLocationObj) {
-	var port = IS_SECURE ? "7998" : "7999";
-	return {
-		pingUrlV4: originalLocationObj.pingIpv4 + "/ping",
-		pingUrlV6: originalLocationObj.pingIpv6 + "/ping",
-		gamemodes: originalLocationObj.gamemodes,
-		loc: originalLocationObj.loc,
-		locId: originalLocationObj.locId,
-		ws: null,
-		ws6: null,
-		pingTries: 0,
-		pingTries6: 0,
-		avgPing: 0,
-		avgPing6: 0,
-		open: false,
-		open6: false,
-		initSocket: function () {
-			this.connectionTries++;
-			this.lastConnectionTry = Date.now();
-			if (this.ws !== null) {
-				this.ws.onmessage = null;
-				this.ws.onopen = null;
-				this.ws.onclose = null;
-				this.ws.close();
-				this.pingTries = 0;
-				this.avgPing = 0;
-				this.lastPingTime = 0;
-				this.waitingForPing = false;
-			}
-			this.ws = new WebSocket(SECURE_WS + this.pingUrlV4);
-			this.ws.binaryType = "arraybuffer";
-			var parent = this;
-			this.ws.onmessage = function () {
-				if (parent.waitingForPing) {
-					var pingTime = Date.now() - parent.lastPingTime;
-					pingTime += 10;
-					parent.avgPing = parent.avgPing * parent.pingTries + pingTime;
-					parent.pingTries++;
-					parent.avgPing /= parent.pingTries;
-					parent.lastPingTime = Date.now();
-					parent.waitingForPing = false;
-
-					if (parent.pingTries >= 4) {
-						parent.open = false;
-						parent.ws.close();
-					}
-				}
-			};
-			this.ws.onopen = function () {
-				parent.open = true;
-				parent.connectedOnce = true;
-			};
-			this.ws.onclose = function () {
-				parent.open = false;
-			};
-		},
-		initSocket6: function () {
-			this.connectionTries6++;
-			this.lastConnectionTry6 = Date.now();
-			if (this.ws6 !== null) {
-				this.ws6.onmessage = null;
-				this.ws6.onopen = null;
-				this.ws6.onclose = null;
-				this.ws6.close();
-				this.pingTries6 = 0;
-				this.avgPing6 = 0;
-				this.lastPingTime6 = 0;
-				this.waitingForPing6 = false;
-			}
-			this.ws6 = new WebSocket(SECURE_WS + this.pingUrlV6);
-			this.ws6.binaryType = "arraybuffer";
-			var parent = this;
-			this.ws6.onmessage = function () {
-				if (parent.waitingForPing6) {
-					var pingTime = Date.now() - parent.lastPingTime6;
-					parent.avgPing6 = parent.avgPing6 * parent.pingTries6 + pingTime;
-					parent.pingTries6++;
-					parent.avgPing6 /= parent.pingTries6;
-					parent.lastPingTime6 = Date.now();
-					parent.waitingForPing6 = false;
-
-					if (parent.pingTries6 >= 4) {
-						parent.open6 = false;
-						parent.ws6.close();
-					}
-				}
-			};
-			this.ws6.onopen = function () {
-				parent.open6 = true;
-				parent.connectedOnce6 = true;
-			};
-			this.ws6.onclose = function () {
-				parent.open6 = false;
-			};
-		},
-		lastPingTime: 0,
-		lastPingTime6: 0,
-		waitingForPing: false,
-		waitingForPing6: false,
-		//returns true if done checking ping
-		//returns false if not finished yet
-		ping: function () {
-			if (this.waitingForPing) {
-				//if waiting for too long (longer than 10 seconds)
-				var pingTime = Date.now() - this.lastPingTime;
-				if (pingTime > 10000) {
-					this.initSocket();
-				}
-			} else {
-				//not waiting for ping
-				if (this.open && this.ws && this.ws.readyState == WebSocket.OPEN) {
-					//start new ping
-					this.waitingForPing = true;
-					this.lastPingTime = Date.now();
-					this.ws.send(new Uint8Array([0]));
-					return this.pingTries >= 4;
-				} else {
-					//why is it closed? test if it should try again
-					return this.testSuccessfulConnection();
-				}
-			}
-		},
-		ping6: function () {
-			if (this.waitingForPing6) {
-				//if waiting for too long (longer than 10 seconds)
-				var pingTime = Date.now() - this.lastPingTime6;
-				if (pingTime > 10000) {
-					this.initSocket6();
-				}
-			} else {
-				//not waiting for ping
-				if (this.open6 && this.ws6 && this.ws6.readyState == WebSocket.OPEN) {
-					//start new ping
-					this.waitingForPing6 = true;
-					this.lastPingTime6 = Date.now();
-					this.ws6.send(new Uint8Array([0]));
-					return this.pingTries6 >= 4;
-				} else {
-					//why is it closed? test if it should try again
-					return this.testSuccessfulConnection();
-				}
-			}
-		},
-		connectedOnce: false,
-		connectedOnce6: false,
-		connectionTries: 0,
-		connectionTries6: 0,
-		lastConnectionTry: Date.now(),
-		lastConnectionTry6: Date.now(),
-		testSuccessfulConnection: function () {
-			if (this.connectedOnce || this.connectedOnce6) {
-				return true;
-			}
-			if (this.connectionTries > 3) {
-				return true;
-			}
-			if (Date.now() - this.lastConnectionTry < 5000) {
-				return false;
-			}
-			this.initSocket();
-			return false;
-		},
-		testSuccessfulConnection6: function () {
-			if (this.connectedOnce || this.connectedOnce6) {
-				return true;
-			}
-			if (this.connectionTries6 > 3) {
-				return true;
-			}
-			if (Date.now() - this.lastConnectionTry6 < 5000) {
-				return false;
-			}
-			this.initSocket6();
-			return false;
-		},
-	};
-}
-
-function startPingServers() {
-	for (var i = 0; i < servers.length; i++) {
-		var thisServer = servers[i];
-		thisServer.initSocket();
-		thisServer.initSocket6();
-	}
-}
-
 class Player extends EventTarget {
 	constructor(id){
 		super();
@@ -2934,7 +3474,7 @@ class Player extends EventTarget {
 				if (this.mydata) {
 					main_canvas.doCamShakeDir(this.dir);
 				}
-				var prev = 0;
+				let prev = 0;
 				while (true) {
 					prev += Math.random() * 0.4 + 0.5;
 					if (prev >= Math.PI * 2) {
@@ -2962,16 +3502,11 @@ class Player extends EventTarget {
 		this.honkMaxTime = time;
 		this.dispatchEvent(new CustomEvent('honk', {detail: time}));
 		if (this.name.toLowerCase() == "joris") {
-			if (honkSfx == null) {
-				honkSfx = new Audio("../static/honk.mp3");
-			}
 			honkSfx.play();
 		}
 	}
 	//moves (lerp) drawPos to the actual player position
 	moveDrawPosToPos(deltaTime){
-		// var xDist = Math.abs(player.pos[0] - player.drawPos[0]);
-		// var yDist = Math.abs(player.pos[1] - player.drawPos[1]);
 		let target;
 		if (this.isDead && !this.deathWasCertain) {
 			target = this.uncertainDeathPosition;
@@ -3025,8 +3560,8 @@ class Player extends EventTarget {
 		//test if player should be dead
 		let playerShouldBeDead = false;
 		if (
-			this.drawPos[0] <= 0 || this.drawPos[1] <= 0 || this.drawPos[0] >= mapSize - 1 ||
-			this.drawPos[1] >= mapSize - 1
+			this.drawPos[0] <= 0 || this.drawPos[1] <= 0 || this.drawPos[0] >= game_state.map_size - 1 ||
+			this.drawPos[1] >= game_state.map_size - 1
 		) {
 			playerShouldBeDead = true;
 		} else if (this.trails.length > 0) {
@@ -3078,8 +3613,7 @@ class Player extends EventTarget {
 		//if my player
 		if (this.mydata) {
 			this.mydata.myPos = [this.pos[0], this.pos[1]];
-			miniMapPlayer.style.left = (this.mydata.myPos[0] / mapSize * 160 + 1.5) + "px";
-			miniMapPlayer.style.top = (this.mydata.myPos[1] / mapSize * 160 + 1.5) + "px";
+			minimap_canvas.update_player(this.mydata.myPos);
 			if (main_canvas.camPosSet) {
 				main_canvas.camPos[0] = lerpt(main_canvas.camPos[0], this.pos[0], 0.03, deltaTime);
 				main_canvas.camPos[1] = lerpt(main_canvas.camPos[1], this.pos[1], 0.03, deltaTime);
@@ -3134,6 +3668,291 @@ class MyPlayerData {
 	}
 }
 
+
+// Some dated code is using these in places like `for(i = 0`.
+// While ideally these variables should all be made local,
+// I'm worried some locations actually rely on them not being local.
+// So for now these are all global, but we should slowly try to get rid of these.
+// Jesper
+//
+// var i, w;
+// Nothing to worry about !
+// Tartasprint
+
+const IS_SECURE = location.protocol.indexOf("https") >= 0;
+const SECURE_WS = IS_SECURE ? "wss://" : "ws://";
+/** @type {SplixCanvas} main ctx */
+let main_canvas;
+
+let game_state = new SplixState();
+/**@type {Minimap} */
+let minimap_canvas;
+/** @type {TransitionCanvas} */
+let transition_canvas;
+/** @type {TutorialCanvas} */
+let tutorial;
+/** @type {SkinButtonCanvas} */
+let skin_button;
+/** @type {SkinScreen} */
+let skin_screen;
+/** @type {SplixLogoCanvas} Canvas for splix animated logo */ 
+let title_canvas;
+/** @type {LifeBox} */
+let life_box;
+/** @type {InputHanlder} */
+let input_handler;
+/** @type {RenderingLoop} */
+let rendering_loop;
+/** @type {QualityUI} */
+let quality_ui;
+/** @type {UglyUI} */
+let ugly_ui;
+var changeDirAt = null,
+	changeDirAtIsHorizontal = false,
+	lastChangedDirPos = null;
+var lastClientsideMoves = [];
+var beginScreenVisible = true;
+var canvasQuality = 1, zoom, uglyMode = false;
+var myScoreElem,
+	myKillsElem,
+	myRealScoreElem,
+	myRankElem,
+	totalPlayersElem;
+var leaderboardElem, leaderboardDivElem, leaderboardHidden = localStorage.leaderboardHidden == "true";
+var playUI,
+	beginScreen,
+	notificationElem,
+	formElem,
+	nameInput,
+	lastNameValue = "",
+	lastNameChangeCheck = 0;
+var scoreStatTarget = 25, scoreStat = 25, realScoreStatTarget = 25, realScoreStat = 25;
+var showCouldntConnectAfterTransition = false, playingAndReady = false;
+var isTransitioning = false;
+var doRefreshAfterDie = false, pressedKeys = [];
+var skipDeathTransition = false, allowSkipDeathTransition = false, deathTransitionTimeout = null;
+var closeNotification = null, connectionLostNotification = null;
+var lastMyPosSetClientSideTime = 0,
+	lastMyPosServerSideTime = 0,
+	lastMyPosSetValidClientSideTime = 0,
+	lastMyPosHasBeenConfirmed = false;
+var uiElems = [];
+let lastStat = new Stats();
+let lastStatDeathType = 0,
+	lastStatKiller = "";
+let bestStat = new Stats();
+var lastStatTimer = 0, lastStatCounter = 0, lastStatValueElem, bestStatValueElem;
+var joinButton,
+	gamemodeDropDownEl;
+var didConfirmOpenInApp = false;
+let debugging = {
+	frames: 0,
+	time_start: 0,
+	getFPS: () => {
+		return debugging.frames*1000/(Date.now()-debugging.time_start)
+	},
+}
+
+//called by form, connects with transition and error handling
+var isConnectingWithTransition = false;
+
+/**@type {GameConnection?} */
+let game_connection = null;
+
+function countPlayGame() {
+	let old = 0;
+	if (localStorage.getItem("totalGamesPlayed") !== null) {
+		old = localStorage.totalGamesPlayed;
+	}
+	old++;
+	lsSet("totalGamesPlayed", old);
+}
+
+function generateServerLocation(originalLocationObj) {
+	const port = IS_SECURE ? "7998" : "7999";
+	return {
+		pingUrlV4: originalLocationObj.pingIpv4 + "/ping",
+		pingUrlV6: originalLocationObj.pingIpv6 + "/ping",
+		gamemodes: originalLocationObj.gamemodes,
+		loc: originalLocationObj.loc,
+		locId: originalLocationObj.locId,
+		ws: null,
+		ws6: null,
+		pingTries: 0,
+		pingTries6: 0,
+		avgPing: 0,
+		avgPing6: 0,
+		open: false,
+		open6: false,
+		initSocket: function () {
+			this.connectionTries++;
+			this.lastConnectionTry = Date.now();
+			if (this.ws !== null) {
+				this.ws.onmessage = null;
+				this.ws.onopen = null;
+				this.ws.onclose = null;
+				this.ws.close();
+				this.pingTries = 0;
+				this.avgPing = 0;
+				this.lastPingTime = 0;
+				this.waitingForPing = false;
+			}
+			this.ws = new WebSocket(SECURE_WS + this.pingUrlV4);
+			this.ws.binaryType = "arraybuffer";
+			const parent = this;
+			this.ws.onmessage = function () {
+				if (parent.waitingForPing) {
+					let pingTime = Date.now() - parent.lastPingTime;
+					pingTime += 10;
+					parent.avgPing = parent.avgPing * parent.pingTries + pingTime;
+					parent.pingTries++;
+					parent.avgPing /= parent.pingTries;
+					parent.lastPingTime = Date.now();
+					parent.waitingForPing = false;
+
+					if (parent.pingTries >= 4) {
+						parent.open = false;
+						parent.ws.close();
+					}
+				}
+			};
+			this.ws.onopen = function () {
+				parent.open = true;
+				parent.connectedOnce = true;
+			};
+			this.ws.onclose = function () {
+				parent.open = false;
+			};
+		},
+		initSocket6: function () {
+			this.connectionTries6++;
+			this.lastConnectionTry6 = Date.now();
+			if (this.ws6 !== null) {
+				this.ws6.onmessage = null;
+				this.ws6.onopen = null;
+				this.ws6.onclose = null;
+				this.ws6.close();
+				this.pingTries6 = 0;
+				this.avgPing6 = 0;
+				this.lastPingTime6 = 0;
+				this.waitingForPing6 = false;
+			}
+			this.ws6 = new WebSocket(SECURE_WS + this.pingUrlV6);
+			this.ws6.binaryType = "arraybuffer";
+			const parent = this;
+			this.ws6.onmessage = function () {
+				if (parent.waitingForPing6) {
+					const pingTime = Date.now() - parent.lastPingTime6;
+					parent.avgPing6 = parent.avgPing6 * parent.pingTries6 + pingTime;
+					parent.pingTries6++;
+					parent.avgPing6 /= parent.pingTries6;
+					parent.lastPingTime6 = Date.now();
+					parent.waitingForPing6 = false;
+
+					if (parent.pingTries6 >= 4) {
+						parent.open6 = false;
+						parent.ws6.close();
+					}
+				}
+			};
+			this.ws6.onopen = function () {
+				parent.open6 = true;
+				parent.connectedOnce6 = true;
+			};
+			this.ws6.onclose = function () {
+				parent.open6 = false;
+			};
+		},
+		lastPingTime: 0,
+		lastPingTime6: 0,
+		waitingForPing: false,
+		waitingForPing6: false,
+		//returns true if done checking ping
+		//returns false if not finished yet
+		ping: function () {
+			if (this.waitingForPing) {
+				//if waiting for too long (longer than 10 seconds)
+				const pingTime = Date.now() - this.lastPingTime;
+				if (pingTime > 10000) {
+					this.initSocket();
+				}
+			} else {
+				//not waiting for ping
+				if (this.open && this.ws && this.ws.readyState == WebSocket.OPEN) {
+					//start new ping
+					this.waitingForPing = true;
+					this.lastPingTime = Date.now();
+					this.ws.send(new Uint8Array([0]));
+					return this.pingTries >= 4;
+				} else {
+					//why is it closed? test if it should try again
+					return this.testSuccessfulConnection();
+				}
+			}
+		},
+		ping6: function () {
+			if (this.waitingForPing6) {
+				//if waiting for too long (longer than 10 seconds)
+				const pingTime = Date.now() - this.lastPingTime6;
+				if (pingTime > 10000) {
+					this.initSocket6();
+				}
+			} else {
+				//not waiting for ping
+				if (this.open6 && this.ws6 && this.ws6.readyState == WebSocket.OPEN) {
+					//start new ping
+					this.waitingForPing6 = true;
+					this.lastPingTime6 = Date.now();
+					this.ws6.send(new Uint8Array([0]));
+					return this.pingTries6 >= 4;
+				} else {
+					//why is it closed? test if it should try again
+					return this.testSuccessfulConnection();
+				}
+			}
+		},
+		connectedOnce: false,
+		connectedOnce6: false,
+		connectionTries: 0,
+		connectionTries6: 0,
+		lastConnectionTry: Date.now(),
+		lastConnectionTry6: Date.now(),
+		testSuccessfulConnection: function () {
+			if (this.connectedOnce || this.connectedOnce6) {
+				return true;
+			}
+			if (this.connectionTries > 3) {
+				return true;
+			}
+			if (Date.now() - this.lastConnectionTry < 5000) {
+				return false;
+			}
+			this.initSocket();
+			return false;
+		},
+		testSuccessfulConnection6: function () {
+			if (this.connectedOnce || this.connectedOnce6) {
+				return true;
+			}
+			if (this.connectionTries6 > 3) {
+				return true;
+			}
+			if (Date.now() - this.lastConnectionTry6 < 5000) {
+				return false;
+			}
+			this.initSocket6();
+			return false;
+		},
+	};
+}
+
+function startPingServers() {
+	for (const server of servers) {
+		server.initSocket();
+		server.initSocket6();
+	}
+}
+
 //localStorage with ios private mode error handling
 function lsSet(name, value) {
 	try {
@@ -3145,10 +3964,10 @@ function lsSet(name, value) {
 }
 
 function checkUsername(name) {
-	var lower = name.toLowerCase();
+	const lower = name.toLowerCase();
 
 	if (lower == "denniskoe") {
-		var s = document.body.style;
+		const s = document.body.style;
 		s.webkitFilter = s.filter = "contrast(200%) hue-rotate(90deg) invert(100%)";
 	} else if (lower == "kwebbelkop") {
 		lsSet("skinColor", 12);
@@ -3196,118 +4015,15 @@ function nameInputOnChange() {
 }
 
 //sends new direction to websocket
-var lastSendDir = -1, lastSendDirTime = 0; //used to prevent spamming buttons
+//used to prevent spamming buttons
 function sendDir(dir, skipQueue) {
 	// console.log("======sendDir",dir, skipQueue);
-	if (!game_connection || !game_state.my_player.mydata.myPos) {
+	if (!game_connection) {
 		return false;
 	}
-	//game_state.my_player doesn't exist
-	if (!game_state.my_player) {
-		return false;
-	}
-
-	//prevent spamming sendDir function
-	if (
-		dir == lastSendDir && //if dir is same as old sendDir call
-		(Date.now() - lastSendDirTime) < 0.7 / GLOBAL_SPEED // if last call was less than 'one block travel time' ago
-	) {
-		return false;
-	}
-	lastSendDir = dir;
-	lastSendDirTime = Date.now();
-
-	//dir is already the current direction, don't do anything
-	if (game_state.my_player.dir == dir) {
-		// console.log("already current direction, don't do anything");
-		addSendDirQueue(dir, skipQueue);
-		return false;
-	}
-
-	//if dir is the opposite direction
-	if (
-		(dir === 0 && game_state.my_player.dir == 2) ||
-		(dir == 2 && game_state.my_player.dir === 0) ||
-		(dir == 1 && game_state.my_player.dir == 3) ||
-		(dir == 3 && game_state.my_player.dir == 1)
-	) {
-		// console.log("already opposite direction, don't send");
-		addSendDirQueue(dir, skipQueue);
-		return false;
-	}
-
-	//hide cursor
-	mouseHidePos = [lastMousePos[0], lastMousePos[1]];
-	document.body.style.cursor = "none";
-
-	var horizontal = game_state.my_player.dir == 1 || game_state.my_player.dir == 3; //wether next direction is horizontal movement or not
-	let coord = game_state.my_player.mydata.myPos[horizontal ? 1 : 0];
-	var newPos = [game_state.my_player.mydata.myPos[0], game_state.my_player.mydata.myPos[1]];
-	var roundCoord = Math.round(coord);
-	newPos[horizontal ? 1 : 0] = roundCoord;
-
-	// console.log("test already sent");
-
-	//test if the coordinate being sent wasn't already sent earlier
-	// console.log(lastChangedDirPos);
-	if (
-		(game_state.my_player.dir === 0 && newPos[0] <= lastChangedDirPos[0]) ||
-		(game_state.my_player.dir == 1 && newPos[1] <= lastChangedDirPos[1]) ||
-		(game_state.my_player.dir == 2 && newPos[0] >= lastChangedDirPos[0]) ||
-		(game_state.my_player.dir == 3 && newPos[1] >= lastChangedDirPos[1])
-	) {
-		// console.log("same coordinate, don't send");
-		addSendDirQueue(dir, skipQueue);
-		return false;
-	}
-
-	var changeDirNow = false;
-	var blockPos = coord - Math.floor(coord);
-	if (game_state.my_player.dir <= 1) { //right or down
-		if (blockPos < 0.45) {
-			changeDirNow = true;
-		}
-	} else if (game_state.my_player.dir <= 3) { //left or up
-		if (blockPos > 0.55) {
-			changeDirNow = true;
-		}
-	} else { //paused
-		changeDirNow = true;
-	}
-
-	// console.log("changeDirNow",changeDirNow);
-
-	if (changeDirNow) {
-		changeMyDir(dir, newPos);
-	} else {
-		game_state.my_player.mydata.nextDir = dir;
-		changeDirAt = roundCoord;
-		changeDirAtIsHorizontal = horizontal;
-		lastChangedDirPos = [newPos[0], newPos[1]];
-	}
-	lastMyPosSetClientSideTime = Date.now();
-	if (lastMyPosHasBeenConfirmed) {
-		lastMyPosSetValidClientSideTime = Date.now();
-	}
-	lastMyPosHasBeenConfirmed = false;
-	// console.log("send ======= UPDATE_DIR ======",dir,newPos);
-	game_connection.wsSendMsg(sendAction.UPDATE_DIR, {
-		dir: dir,
-		coord: newPos,
-	});
-	return true;
+	return game_connection.sendDir(dir,skipQueue);
 }
 
-var sendDirQueue = [];
-function addSendDirQueue(dir, skip) {
-	// console.log("adding sendDir to queue", dir, skip);
-	if (!skip && sendDirQueue.length < 3) {
-		sendDirQueue.push({
-			dir: dir,
-			addTime: Date.now(),
-		});
-	}
-}
 
 function changeMyDir(dir, newPos, extendTrail, isClientside) {
 	// console.log("changeMyDir");
@@ -3336,9 +4052,9 @@ function changeMyDir(dir, newPos, extendTrail, isClientside) {
 
 function trailPush(player, pos) {
 	if (player.trails.length > 0) {
-		var lastTrail = player.trails[player.trails.length - 1].trail;
+		const lastTrail = player.trails[player.trails.length - 1].trail;
 		if (lastTrail.length > 0) {
-			var lastPos = lastTrail[lastTrail.length - 1];
+			const lastPos = lastTrail[lastTrail.length - 1];
 			if (lastPos[0] != player.pos[0] || lastPos[1] != player.pos[1]) {
 				if (pos === undefined) {
 					pos = [player.pos[0], player.pos[1]];
@@ -3346,7 +4062,7 @@ function trailPush(player, pos) {
 					pos = [pos[0], pos[1]];
 				}
 				lastTrail.push(pos);
-				if (player.mydata && isRequestingMyTrail) {
+				if (player.mydata && game_connection.isRequestingMyTrail) {
 					game_connection.trailPushesDuringRequest.push(pos);
 				}
 			}
@@ -3354,31 +4070,17 @@ function trailPush(player, pos) {
 	}
 }
 
-function honkStart() {
-	if(honkStartTime === undefined){
-		honkStartTime = Date.now();
-	}
-}
-
-function honkEnd() {
-	var now = Date.now();
-	if (now > lastHonkTime && honkStartTime !== undefined) {
-		var time = now - honkStartTime;
-		time = clamp(time, 0, 1000);
-		lastHonkTime = now + time;
-		honkStartTime = undefined;
-		time = iLerp(0, 1000, time);
-		time *= 255;
-		time = Math.floor(time);
-		game_connection.wsSendMsg(sendAction.HONK, time);
-		game_state.my_player?.doHonk(Math.max(70, time));
-	}
-}
-
 //when page is finished loading
 window.addEventListener('load', function () {
+	rendering_loop = new RenderingLoop();
+	input_handler  = new InputHanlder(
+		document.getElementById("touchControls")
+	);
 	main_canvas = new SplixCanvas(document.getElementById("mainCanvas"));
-	minimap_canvas = new MinimapCanvas(document.getElementById("minimapCanvas"));
+	minimap_canvas = new Minimap(
+		document.getElementById("minimapCanvas"),
+		document.getElementById("miniMapPlayer"),
+	);
 	transition_canvas = new TransitionCanvas(document.getElementById("transitionCanvas"));
 	tutorial = new TutorialCanvas(
 		document.getElementById("tutorialCanvas"),
@@ -3392,39 +4094,29 @@ window.addEventListener('load', function () {
 		document.getElementById("skinButton"),
 		document.getElementById("skinButtonShadow"),
 	);
+	title_canvas = new SplixLogoCanvas(document.getElementById("logoCanvas"));
 	life_box = new LifeBox();
-	touchControlsElem = document.getElementById("touchControls");
+	quality_ui = new QualityUI(document.getElementById("qualityText"));
+	ugly_ui = new UglyUI(document.getElementById("uglyText"));
+	
+	
+	
 	notificationElem = document.getElementById("notification");
 	lastStatValueElem = document.getElementById("lastStatsRight");
 	bestStatValueElem = document.getElementById("bestStatsRight");
 	joinButton = document.getElementById("joinButton");
-	qualityText = document.getElementById("qualityText");
-	uglyText = document.getElementById("uglyText");
 
-	window.addEventListener("blur", function (event) {
-		pressedKeys = [];
-	}, false);
-	bindSwipeEvents();
-	window.oncontextmenu = function (e) {
-		if (e.target.nodeName.toLowerCase() == "embed") {
-			return true;
-		} else {
-			e.preventDefault();
-			return false;
-		}
-	};
 	myScoreElem = document.getElementById("blockCaptureCount");
 	myRealScoreElem = document.getElementById("score");
 	myKillsElem = document.getElementById("myKills");
 	myRankElem = document.getElementById("myRank");
 	totalPlayersElem = document.getElementById("totalPlayers");
 	leaderboardElem = document.createElement("tbody");
-	var table = document.createElement("table");
+	const table = document.createElement("table");
 	table.appendChild(leaderboardElem);
 	leaderboardDivElem = document.getElementById("leaderboard");
 	leaderboardDivElem.appendChild(table);
 	uiElems.push(leaderboardDivElem);
-	miniMapPlayer = document.getElementById("miniMapPlayer");
 	beginScreen = document.getElementById("beginScreen");
 	playUI = document.getElementById("playUI");
 	uiElems.push(document.getElementById("scoreBlock"));
@@ -3454,43 +4146,25 @@ window.addEventListener('load', function () {
 		return false;
 	};
 
-	//show cursor
-	window.addEventListener("click", showCursor);
-	window.addEventListener("mousemove", function (e) {
-		lastMousePos = [e.screenX, e.screenY];
-		var distX = lastMousePos[0] - mouseHidePos[0];
-		var distY = lastMousePos[1] - mouseHidePos[1];
-		var dist = Math.sqrt(Math.pow(distX, 2) + Math.pow(distY, 2));
-		if (dist > 15) {
-			showCursor();
-		}
-	});
-
-	//quality button
-	qualityText.onclick = toggleQuality;
-	uglyText.onclick = toggleUglyMode;
-	setQuality();
-	setUglyText();
-	title_canvas = new SplixLogoCanvas(document.getElementById("logoCanvas"));
 	setLeaderboardVisibility();
 
 	//best stats
-	bestStatBlocks = Math.max(bestStatBlocks, localStorage.getItem("bestStatBlocks"));
-	bestStatKills = Math.max(bestStatKills, localStorage.getItem("bestStatKills"));
-	bestStatLbRank = Math.max(bestStatLbRank, localStorage.getItem("bestStatLbRank"));
-	bestStatAlive = Math.max(bestStatAlive, localStorage.getItem("bestStatAlive"));
-	bestStatNo1Time = Math.max(bestStatNo1Time, localStorage.getItem("bestStatNo1Time"));
+	bestStat.blocks = Math.max(bestStat.blocks, localStorage.getItem("bestStatBlocks"));
+	bestStat.kills = Math.max(bestStat.kills, localStorage.getItem("bestStatKills"));
+	bestStat.leaderboard_rank = Math.max(bestStat.leaderboard_rank, localStorage.getItem("bestStatLbRank"));
+	bestStat.alive = Math.max(bestStat.alive, localStorage.getItem("bestStatAlive"));
+	bestStat.no1_time = Math.max(bestStat.no1_time, localStorage.getItem("bestStatNo1Time"));
 
 	initServerSelection();
 
 	document.getElementById("serverSelect").addEventListener(
 		"change",
-		(e) => localStorage.setItem("lastSelectedEndpoint", e.target.value),
+		e => localStorage.setItem("lastSelectedEndpoint", e.target.value),
 	);
 	debugging.time_start = Date.now();
-	window.requestAnimationFrame(loop);
+	window.requestAnimationFrame(  timeStamp => {rendering_loop.loop(timeStamp)}  );
 
-	var devString = IS_DEV_BUILD ? " (dev build)" : "";
+	const devString = IS_DEV_BUILD ? " (dev build)" : "";
 	console.log(
 		"%c splix.io %c\n\n\nversion " + CLIENT_VERSION + " loaded" + devString,
 		"color: #a22929; font-size: 50px; font-family: arial; text-shadow: 1px 1px #7b1e1e, 2px 2px #7b1e1e;",
@@ -3520,7 +4194,7 @@ function showMainCanvas() {
 	playUI.style.display = null;
 	main_canvas.show();
 	if ("ontouchstart" in window) {
-		touchControlsElem.style.display = null;
+		input_handler.touchcontrol_elem.style.display = null;
 	}
 	setNotification("");
 }
@@ -3540,7 +4214,7 @@ function showBegin() {
 function hideMainCanvas() {
 	playUI.style.display = "none";
 	main_canvas.hide()
-	touchControlsElem.style.display = "none";
+	input_handler.touchcontrol_elem.style.display = "none";
 }
 
 function openSkinScreen() {
@@ -3560,37 +4234,12 @@ function showBeginHideSkin() {
 	skin_screen.hide();
 }
 
-//when WebSocket connection is closed
-function onClose() {
-	if (!!game_connection && !!game_connection.ws && game_connection.ws.readyState == WebSocket.OPEN) {
-		game_connection.ws.close();
-	}
-	if (!playingAndReady) {
-		if (!isTransitioning) {
-			if (couldntConnect()) {
-				showBeginHideMainCanvas();
-			}
-		} else {
-			showCouldntConnectAfterTransition = true;
-		}
-	} else if (!closedBecauseOfDeath) {
-		transition_canvas.doTransition("", false, resetAll);
-		// ga("send","event","Game","lost_connection_mid_game");
-		// _paq.push(['trackEvent', 'Game', 'lost_connection_mid_game']);
-		setNotification("The connection was lost :/");
-	} else {
-		//disconnect because of death 
-	}
-	game_connection.ws = null;
-	game_connection.isConnecting = false;
-}
-
 //if trying to establish a connection but failed
 //returns true if it actually couldn't connect,
 //false if it will try again
 function couldntConnect() {
 	setNotification("Couldn't connect to the server :/");
-	var err = new Error("couldntConnectError");
+	const err = new Error("couldntConnectError");
 	console.log(err.stack);
 	isTransitioning = true;
 	return true;
@@ -3625,6 +4274,8 @@ class GameConnection {
 	// Status
 	isConnecting = true;
 	closedBecauseOfDeath = false;
+	myRankSent = false;
+	hasReceivedChunkThisGame = false;
 	
 	// Ping
 	serverAvgPing = 0;
@@ -3635,7 +4286,13 @@ class GameConnection {
 	
 	// Trail
 	isRequestingMyTrail = false;
+	skipTrailRequestResponse = false;
 	trailPushesDuringRequest = [];
+
+	// Direction/moving
+	lastSendDir = -1;
+	lastSendDirTime = 0;
+	sendDirQueue = [];
 
 	/** @type {number}  time stamp of the opening of the websocket connection */
 	onOpenTime;
@@ -3652,7 +4309,7 @@ class GameConnection {
 		};
 		this.ws.onclose = function (evt) {
 			if (that.ws == this) {
-				onClose(evt);
+				that.onClose(evt);
 			}
 		};
 		this.ws.onopen = function (evt) {
@@ -3677,6 +4334,31 @@ class GameConnection {
 		}
 		countPlayGame();
 		this.onOpenTime = Date.now();
+	}
+
+	//when WebSocket connection is closed
+	onClose() {
+		if (!!this && !!this.ws && this.ws.readyState == WebSocket.OPEN) {
+			this.ws.close();
+		}
+		if (!playingAndReady) {
+			if (!isTransitioning) {
+				if (couldntConnect()) {
+					showBeginHideMainCanvas();
+				}
+			} else {
+				showCouldntConnectAfterTransition = true;
+			}
+		} else if (!this.closedBecauseOfDeath) {
+			transition_canvas.doTransition("", false, resetAll);
+			// ga("send","event","Game","lost_connection_mid_game");
+			// _paq.push(['trackEvent', 'Game', 'lost_connection_mid_game']);
+			setNotification("The connection was lost :/");
+		} else {
+			//disconnect because of death 
+		}
+		game_connection.ws = null;
+		game_connection.isConnecting = false;
 	}
 
 	//sends a legacy message which is required for older servers
@@ -3712,7 +4394,7 @@ class GameConnection {
 
 	//sends name to websocket
 	sendName() {
-		var n = nameInput.value;
+		const n = nameInput.value;
 		if (n !== undefined && n !== null && n !== "" && n.trim() !== "") {
 			this.wsSendMsg(sendAction.SET_USERNAME, n);
 		}
@@ -3724,6 +4406,130 @@ class GameConnection {
 		this.wsSendMsg(sendAction.REQUEST_MY_TRAIL);
 	}
 	
+	sendDir(dir, skipQueue) {
+		// console.log("======sendDir",dir, skipQueue);
+		if (!game_state.my_player.mydata.myPos) {
+			return false;
+		}
+		//game_state.my_player doesn't exist
+		if (!game_state.my_player) {
+			return false;
+		}
+	
+		//prevent spamming sendDir function
+		if (
+			dir == this.lastSendDir && //if dir is same as old sendDir call
+			(Date.now() - this.lastSendDirTime) < 0.7 / GLOBAL_SPEED // if last call was less than 'one block travel time' ago
+		) {
+			return false;
+		}
+		this.lastSendDir = dir;
+		this.lastSendDirTime = Date.now();
+	
+		//dir is already the current direction, don't do anything
+		if (game_state.my_player.dir == dir) {
+			// console.log("already current direction, don't do anything");
+			this.addSendDirQueue(dir, skipQueue);
+			return false;
+		}
+	
+		//if dir is the opposite direction
+		if (
+			(dir === 0 && game_state.my_player.dir == 2) ||
+			(dir == 2 && game_state.my_player.dir === 0) ||
+			(dir == 1 && game_state.my_player.dir == 3) ||
+			(dir == 3 && game_state.my_player.dir == 1)
+		) {
+			// console.log("already opposite direction, don't send");
+			this.addSendDirQueue(dir, skipQueue);
+			return false;
+		}
+	
+		//hide cursor
+		input_handler.mouseHidePos = [input_handler.lastMousePos[0], input_handler.lastMousePos[1]];
+		document.body.style.cursor = "none";
+	
+		//wether next direction is horizontal movement or not
+		const horizontal = game_state.my_player.dir == 1 || game_state.my_player.dir == 3;
+		const coord = game_state.my_player.mydata.myPos[horizontal ? 1 : 0];
+		const newPos = [game_state.my_player.mydata.myPos[0], game_state.my_player.mydata.myPos[1]];
+		const roundCoord = Math.round(coord);
+		newPos[horizontal ? 1 : 0] = roundCoord;
+	
+		// console.log("test already sent");
+	
+		//test if the coordinate being sent wasn't already sent earlier
+		// console.log(lastChangedDirPos);
+		if (
+			(game_state.my_player.dir === 0 && newPos[0] <= lastChangedDirPos[0]) ||
+			(game_state.my_player.dir == 1 && newPos[1] <= lastChangedDirPos[1]) ||
+			(game_state.my_player.dir == 2 && newPos[0] >= lastChangedDirPos[0]) ||
+			(game_state.my_player.dir == 3 && newPos[1] >= lastChangedDirPos[1])
+		) {
+			// console.log("same coordinate, don't send");
+			this.addSendDirQueue(dir, skipQueue);
+			return false;
+		}
+	
+		let changeDirNow = false;
+		const blockPos = coord - Math.floor(coord);
+		if (game_state.my_player.dir <= 1) { //right or down
+			if (blockPos < 0.45) {
+				changeDirNow = true;
+			}
+		} else if (game_state.my_player.dir <= 3) { //left or up
+			if (blockPos > 0.55) {
+				changeDirNow = true;
+			}
+		} else { //paused
+			changeDirNow = true;
+		}
+	
+		// console.log("changeDirNow",changeDirNow);
+	
+		if (changeDirNow) {
+			changeMyDir(dir, newPos);
+		} else {
+			game_state.my_player.mydata.nextDir = dir;
+			changeDirAt = roundCoord;
+			changeDirAtIsHorizontal = horizontal;
+			lastChangedDirPos = [newPos[0], newPos[1]];
+		}
+		lastMyPosSetClientSideTime = Date.now();
+		if (lastMyPosHasBeenConfirmed) {
+			lastMyPosSetValidClientSideTime = Date.now();
+		}
+		lastMyPosHasBeenConfirmed = false;
+		// console.log("send ======= UPDATE_DIR ======",dir,newPos);
+		game_connection.wsSendMsg(sendAction.UPDATE_DIR, {
+			dir: dir,
+			coord: newPos,
+		});
+		return true;
+	}
+
+	render(){ // TODO give a better name to this method
+		if (this.sendDirQueue.length > 0) {
+			const thisDir = this.sendDirQueue[0];
+			if (
+				Date.now() - thisDir.addTime > 1.2 / GLOBAL_SPEED || // older than '1.2 blocks travel time'
+				this.sendDir(thisDir.dir, true) // senddir call was successful
+			) {
+				this.sendDirQueue.shift(); //remove item
+			}
+		}
+	}
+
+	addSendDirQueue(dir, skip) {
+		// console.log("adding sendDir to queue", dir, skip);
+		if (!skip && this.sendDirQueue.length < 3) {
+			this.sendDirQueue.push({
+				dir: dir,
+				addTime: Date.now(),
+			});
+		}
+	}
+
 	/**
 	 * send a message to the websocket, returns true if successful
 	 * @param {sendAction} action
@@ -3755,8 +4561,8 @@ class GameConnection {
 				array.push(data.pattern);
 			}
 			else if (action == sendAction.REQUEST_CLOSE) {
-				for (var i = 0; i < data.length; i++) {
-					array.push(data[i]);
+				for (const b of data) {
+					array.push(b);
 				}
 			}
 			else if (action == sendAction.HONK) {
@@ -3768,7 +4574,7 @@ class GameConnection {
 			}
 			else if (action == sendAction.VERSION) {
 				array.push(data.type);
-				var verBytes = intToBytes(data.ver, 2);
+				const verBytes = intToBytes(data.ver, 2);
 				array.push(verBytes[0]);
 				array.push(verBytes[1]);
 			}
@@ -3786,7 +4592,6 @@ class GameConnection {
 	//when receiving a message from the websocket
 	onMessage(evt) {
 		// console.log(evt);
-		let x, y, type, id, player, w, h, block, i, j, nameBytes;
 		let data = new Uint8Array(evt.data);
 		// console.log(evt.data);
 		// for(var key in receiveAction){
@@ -3847,7 +4652,7 @@ class GameConnection {
 				// recieves move #2
 				// console.log(lastClientsideMoves);
 				if (lastClientsideMoves.length > 0) {
-					var lastClientsideMove = lastClientsideMoves.shift();
+					const lastClientsideMove = lastClientsideMoves.shift();
 					if (
 						lastClientsideMove.dir == newDir &&
 						lastClientsideMove.pos[0] == newPos[0] &&
@@ -3876,7 +4681,7 @@ class GameConnection {
 					//else than the client thinks he is. To prevent the trail from
 					//getting messed up, request the full trail
 					this.startRequestMyTrail();
-					sendDirQueue = [];
+					this.sendDirQueue = [];
 				}
 
 				//always set the server position
@@ -3892,9 +4697,9 @@ class GameConnection {
 				player.pos = newPosOffset;
 				// console.log("doSetPos",newPosOffset);
 
-				var extendTrailFlagSet = data.length > 8;
+				const extendTrailFlagSet = data.length > 8;
 				if (extendTrailFlagSet) {
-					var extendTrail = data[8] == 1;
+					const extendTrail = data[8] == 1;
 					if (extendTrail) {
 						trailPush(player, newPos);
 					} else {
@@ -3912,42 +4717,42 @@ class GameConnection {
 			}
 		}
 		if (data[0] == receiveAction.FILL_AREA) {
-			x = bytesToInt(data[1], data[2]);
-			y = bytesToInt(data[3], data[4]);
-			w = bytesToInt(data[5], data[6]);
-			h = bytesToInt(data[7], data[8]);
-			type = data[9];
+			const x = bytesToInt(data[1], data[2]);
+			const y = bytesToInt(data[3], data[4]);
+			const w = bytesToInt(data[5], data[6]);
+			const h = bytesToInt(data[7], data[8]);
+			const type = data[9];
 			const pattern = data[10];
 			const isEdgeChunk = data[11];
 			game_state.fillArea(x, y, w, h, type, pattern, undefined, isEdgeChunk);
 		}
 		if (data[0] == receiveAction.SET_TRAIL) {
-			id = bytesToInt(data[1], data[2]);
-			player = game_state.getPlayer(id);
+			const id = bytesToInt(data[1], data[2]);
+			const player = game_state.getPlayer(id);
 			const newTrail = [];
 			//wether the new trail should replace the old trail (don't play animation)
 			//or append it to the trails list (do play animation)
-			var replace = false;
-			for (i = 3; i < data.length; i += 4) {
-				var coord = [bytesToInt(data[i], data[i + 1]), bytesToInt(data[i + 2], data[i + 3])];
+			let replace = false;
+			for (let i = 3; i < data.length; i += 4) {
+				const coord = [bytesToInt(data[i], data[i + 1]), bytesToInt(data[i + 2], data[i + 3])];
 				newTrail.push(coord);
 			}
 			if (player.mydata) {
-				if (skipTrailRequestResponse) {
-					skipTrailRequestResponse = false;
+				if (this.skipTrailRequestResponse) {
+					this.skipTrailRequestResponse = false;
 					game_connection.trailPushesDuringRequest = [];
 				} else {
-					if (isRequestingMyTrail) {
-						isRequestingMyTrail = false;
+					if (this.isRequestingMyTrail) {
+						this.isRequestingMyTrail = false;
 						replace = true;
-						for (i = 0; i < game_connection.trailPushesDuringRequest.length; i++) {
-							newTrail.push(game_connection.trailPushesDuringRequest[i]);
+						for (const trail_push of this.trailPushesDuringRequest) {
+							newTrail.push(trail_push);
 						}
 						game_connection.trailPushesDuringRequest = [];
 					}
 					//if last trail was emtpy (if entering enemy land) send a request for the new trail
 					if (player.trails.length > 0) {
-						var lastTrail = player.trails[player.trails.length - 1];
+						const lastTrail = player.trails[player.trails.length - 1];
 						if (lastTrail.trail.length <= 0 && newTrail.length > 0) {
 							this.startRequestMyTrail();
 						}
@@ -3956,7 +4761,7 @@ class GameConnection {
 			}
 			if (replace) {
 				if (player.trails.length > 0) {
-					var last = player.trails[player.trails.length - 1];
+					const last = player.trails[player.trails.length - 1];
 					last.trail = newTrail;
 					last.vanishTimer = 0;
 				} else {
@@ -3971,13 +4776,13 @@ class GameConnection {
 			}
 		}
 		if (data[0] == receiveAction.EMPTY_TRAIL_WITH_LAST_POS) {
-			id = bytesToInt(data[1], data[2]);
-			player = game_state.getPlayer(id);
+			const id = bytesToInt(data[1], data[2]);
+			const player = game_state.getPlayer(id);
 			if (player.trails.length > 0) {
-				var prevTrail = player.trails[player.trails.length - 1].trail;
+				const prevTrail = player.trails[player.trails.length - 1].trail;
 				if (prevTrail.length > 0) {
-					x = bytesToInt(data[3], data[4]);
-					y = bytesToInt(data[5], data[6]);
+					const x = bytesToInt(data[3], data[4]);
+					const y = bytesToInt(data[5], data[6]);
 					prevTrail.push([x, y]);
 				}
 			}
@@ -3987,8 +4792,8 @@ class GameConnection {
 			//(one block or so) you'll start trailing
 			//in your own land. It's a ghost trail and you make
 			//ghost deaths every time you hit the line
-			if (player.mydata && isRequestingMyTrail) {
-				skipTrailRequestResponse = true;
+			if (player.mydata && this.isRequestingMyTrail) {
+				this.skipTrailRequestResponse = true;
 			}
 
 			player.trails.push({
@@ -3997,85 +4802,81 @@ class GameConnection {
 			});
 		}
 		if (data[0] == receiveAction.PLAYER_DIE) {
-			id = bytesToInt(data[1], data[2]);
-			player = game_state.getPlayer(id);
+			const id = bytesToInt(data[1], data[2]);
+			const player = game_state.getPlayer(id);
 			if (data.length > 3) {
-				x = bytesToInt(data[3], data[4]);
-				y = bytesToInt(data[5], data[6]);
+				const x = bytesToInt(data[3], data[4]);
+				const y = bytesToInt(data[5], data[6]);
 				player.pos = [x, y];
 			}
 			player.die(true);
 		}
 		if (data[0] == receiveAction.CHUNK_OF_BLOCKS) {
-			x = bytesToInt(data[1], data[2]);
-			y = bytesToInt(data[3], data[4]);
-			w = bytesToInt(data[5], data[6]);
-			h = bytesToInt(data[7], data[8]);
-			i = 9;
-			for (j = x; j < x + w; j++) {
-				for (var k = y; k < y + h; k++) {
-					block = game_state.getBlock(j, k);
+			const x = bytesToInt(data[1], data[2]);
+			const y = bytesToInt(data[3], data[4]);
+			const w = bytesToInt(data[5], data[6]);
+			const h = bytesToInt(data[7], data[8]);
+			let i = 9;
+			for (let j = x; j < x + w; j++) {
+				for (let k = y; k < y + h; k++) {
+					const block = game_state.getBlock(j, k);
 					block.setBlockId(data[i], false);
 					i++;
 				}
 			}
-			if (!hasReceivedChunkThisGame) {
-				hasReceivedChunkThisGame = true;
+			if (!this.hasReceivedChunkThisGame) {
+				this.hasReceivedChunkThisGame = true;
 				this.wsSendMsg(sendAction.READY);
-				didSendSecondReady = true;
 			}
 		}
 		if (data[0] == receiveAction.REMOVE_PLAYER) {
-			id = bytesToInt(data[1], data[2]);
+			const id = bytesToInt(data[1], data[2]);
 			game_state.players.delete(id);
 		}
 		if (data[0] == receiveAction.PLAYER_NAME) {
-			id = bytesToInt(data[1], data[2]);
-			nameBytes = data.subarray(3, data.length);
-			var name = Utf8ArrayToStr(nameBytes);
-			player = game_state.getPlayer(id);
+			const id = bytesToInt(data[1], data[2]);
+			const nameBytes = data.subarray(3, data.length);
+			const  name = Utf8ArrayToStr(nameBytes);
+			const player = game_state.getPlayer(id);
 			player.name = filter(name);
 		}
 		if (data[0] == receiveAction.MY_SCORE) {
-			var score = bytesToInt(data[1], data[2], data[3], data[4]);
-			var kills = 0;
-			if (data.length > 5) {
-				kills = bytesToInt(data[5], data[6]);
-			}
+			const score = bytesToInt(data[1], data[2], data[3], data[4]);
+			const kills = data.length > 5 ? bytesToInt(data[5], data[6]) : 0;
 			scoreStatTarget = score;
 			realScoreStatTarget = score + kills * 500;
 			myKillsElem.innerHTML = kills;
 		}
 		if (data[0] == receiveAction.MY_RANK) {
 			game_state.my_player.mydata.rank = bytesToInt(data[1], data[2]);
-			myRankSent = true;
+			this.myRankSent = true;
 			updateStats();
 		}
 		if (data[0] == receiveAction.LEADERBOARD) {
 			leaderboardElem.innerHTML = "";
-			totalPlayers = bytesToInt(data[1], data[2]);
+			game_state.total_players = bytesToInt(data[1], data[2]);
 			updateStats();
-			i = 3;
-			var rank = 1;
+			let i = 3;
+			let rank = 1;
 			while (true) {
 				if (i >= data.length) {
 					break;
 				}
-				var thisPlayerScore = bytesToInt(data[i], data[i + 1], data[i + 2], data[i + 3]);
-				var nameLen = data[i + 4];
-				nameBytes = data.subarray(i + 5, i + 5 + nameLen);
-				var thisPlayerName = Utf8ArrayToStr(nameBytes);
+				const thisPlayerScore = bytesToInt(data[i], data[i + 1], data[i + 2], data[i + 3]);
+				const nameLen = data[i + 4];
+				const nameBytes = data.subarray(i + 5, i + 5 + nameLen);
+				const thisPlayerName = Utf8ArrayToStr(nameBytes);
 
 				//create table row
-				var tr = document.createElement("tr");
+				const tr = document.createElement("tr");
 				tr.className = "scoreRank";
-				var rankElem = document.createElement("td");
+				const rankElem = document.createElement("td");
 				rankElem.innerHTML = "#" + rank;
 				tr.appendChild(rankElem);
-				var nameElem = document.createElement("td");
+				const nameElem = document.createElement("td");
 				nameElem.innerHTML = filter(htmlEscape(thisPlayerName));
 				tr.appendChild(nameElem);
-				var scoreElem = document.createElement("td");
+				const scoreElem = document.createElement("td");
 				scoreElem.innerHTML = thisPlayerScore;
 				tr.appendChild(scoreElem);
 				leaderboardElem.appendChild(tr);
@@ -4083,19 +4884,19 @@ class GameConnection {
 				i = i + 5 + nameLen;
 				rank++;
 			}
-			if (totalPlayers < 30 && doRefreshAfterDie && closeNotification === null) {
-				closeNotification = doTopNotification("This server is about to close, refresh to join a full server.");
+			if (game_state.total_players < 30 && doRefreshAfterDie && closeNotification === null) {
+				closeNotification = new TopNotification("This server is about to close, refresh to join a full server.");
 			}
 		}
 		if (data[0] == receiveAction.MAP_SIZE) {
-			mapSize = bytesToInt(data[1], data[2]);
+			game_state.map_size = bytesToInt(data[1], data[2]);
 		}
 		if (data[0] == receiveAction.YOU_DED) {
 			if (data.length > 1) {
 				lastStat.blocks = bytesToInt(data[1], data[2], data[3], data[4]);
 				if (lastStat.blocks > bestStat.blocks) {
 					bestStat.blocks = lastStat.blocks;
-					lsSet("bestStatBlocks", bestStatBlocks);
+					lsSet("bestStatBlocks", bestStat.blocks);
 				}
 				lastStat.kills = bytesToInt(data[5], data[6]);
 				if (lastStat.kills > bestStat.kills) {
@@ -4127,7 +4928,7 @@ class GameConnection {
 				switch (lastStatDeathType) {
 					case 1:
 						if (data.length > 18) {
-							nameBytes = data.subarray(18, data.length);
+							const nameBytes = data.subarray(18, data.length);
 							lastStatKiller = Utf8ArrayToStr(nameBytes);
 						}
 						break;
@@ -4139,20 +4940,20 @@ class GameConnection {
 						break;
 				}
 			}
-			closedBecauseOfDeath = true;
+			this.closedBecauseOfDeath = true;
 			allowSkipDeathTransition = true;
-			deathTransitionTimeout = window.setTimeout(function () {
+			deathTransitionTimeout = window.setTimeout(() => {
 				// resetAll();
 				if (skipDeathTransition) {
-					transition_canvas.doTransition("", false, function () {
+					transition_canvas.doTransition("", false, () => {
 						onClose();
 						resetAll();
 						connectWithTransition(true);
 					});
 				} else {
 					// console.log("before doTransition",isTransitioning);
-					transition_canvas.doTransition("GAME OVER", true, null, function () {
-						onClose();
+					transition_canvas.doTransition("GAME OVER", true, null, () => {
+						game_connection.onClose();
 						resetAll();
 					}, true);
 					// console.log("after doTransition",isTransitioning);
@@ -4161,16 +4962,15 @@ class GameConnection {
 			}, 1000);
 		}
 		if (data[0] == receiveAction.MINIMAP) {
-			minimap_canvas.update(data);
+			minimap_canvas.update_map(data);
 		}
 		if (data[0] == receiveAction.PLAYER_SKIN) {
-			id = bytesToInt(data[1], data[2]);
-			player = game_state.getPlayer(id);
+			const id = bytesToInt(data[1], data[2]);
+			const player = game_state.getPlayer(id);
+			player.skinBlock = data[3];
 			if (player.mydata) {
-				myColorId = data[3];
 				colorUI();
 			}
-			player.skinBlock = data[3];
 		}
 		if (data[0] == receiveAction.READY) {
 			playingAndReady = true;
@@ -4180,15 +4980,13 @@ class GameConnection {
 			}
 		}
 		if (data[0] == receiveAction.PLAYER_HIT_LINE) {
-			id = bytesToInt(data[1], data[2]);
-			player = game_state.getPlayer(id);
-			var pointsColor = getColorForBlockSkinId(data[3]);
-			x = bytesToInt(data[4], data[5]);
-			y = bytesToInt(data[6], data[7]);
-			var hitSelf = false;
-			if (data.length > 8) {
-				hitSelf = data[8] == 1;
-			}
+			const id = bytesToInt(data[1], data[2]);
+			const player = game_state.getPlayer(id);
+			const pointsColor = getColorForBlockSkinId(data[3]);
+			const x = bytesToInt(data[4], data[5]);
+			const y = bytesToInt(data[6], data[7]);
+			const hitSelf = data.length > 8 && data[8] == 1;
+
 			player.addHitLine([x, y], pointsColor, hitSelf);
 			if (player.mydata && !hitSelf) {
 				main_canvas.doCamShakeDir(player.dir, 10, false);
@@ -4198,9 +4996,9 @@ class GameConnection {
 			doRefreshAfterDie = true;
 		}
 		if (data[0] == receiveAction.PLAYER_HONK) {
-			id = bytesToInt(data[1], data[2]);
-			player = game_state.getPlayer(id);
-			var time = data[3];
+			const id = bytesToInt(data[1], data[2]);
+			const player = game_state.getPlayer(id);
+			const time = data[3];
 			player.doHonk(time);
 		}
 		if (data[0] == receiveAction.PONG) {
@@ -4214,13 +5012,13 @@ class GameConnection {
 			this.waitingForPing = false;
 		}
 		if (data[0] == receiveAction.UNDO_PLAYER_DIE) {
-			id = bytesToInt(data[1], data[2]);
-			player = game_state.getPlayer(id);
+			const id = bytesToInt(data[1], data[2]);
+			const player = game_state.getPlayer(id);
 			player.undoDie();
 		}
 		if (data[0] == receiveAction.TEAM_LIFE_COUNT) {
-			var currentLives = data[1];
-			var totalLives = data[2];
+			const currentLives = data[1];
+			const totalLives = data[2];
 			life_box.setLives(currentLives, totalLives);
 		}
 	}
@@ -4260,35 +5058,26 @@ function resetAll() {
 		realScoreStat =
 		realScoreStatTarget =
 			25;
-	myRankSent = false;
-	totalPlayers = 0;
 	playingAndReady = false;
 	title_canvas.resetNextFrame = true;
 	allowSkipDeathTransition = false;
 	skipDeathTransition = false;
 	minimap_canvas.reset();
-	hasReceivedChunkThisGame = false;
-	didSendSecondReady = false;
 	showBeginHideMainCanvas();
 	if (doRefreshAfterDie) {
 		location.reload();
 	}
-	var s = document.body.style;
+	const s = document.body.style;
 	s.webkitFilter = s.filter = null;
-	for (var topNotificationI = currentTopNotifications.length - 1; topNotificationI >= 0; topNotificationI--) {
-		var thisTopNotification = currentTopNotifications[topNotificationI];
-		thisTopNotification.destroy();
-	}
-	currentTopNotifications = [];
-	sendDirQueue = [];
+	TopNotification.reset_all();
 	life_box.clearAllLives();
 }
 
 function testHashForMobile() {
 	if (deviceType != DeviceTypes.DESKTOP) {
-		var hash = location.hash;
+		const hash = location.hash;
 		if (hash != "" && hash != "#pledged") {
-			var confirmText = "Would you like to join this server in the app?";
+			const confirmText = "Would you like to join this server in the app?";
 			if (confirm(confirmText)) {
 				didConfirmOpenInApp = true;
 				openSplixApp(hash.substring(1, hash.length));
@@ -4298,7 +5087,7 @@ function testHashForMobile() {
 }
 
 function openSplixApp(data) {
-	var url = location.href = "splix://" + data;
+	const url = location.href = "splix://" + data;
 	if (deviceType == DeviceTypes.ANDROID && navigator.userAgent.toLowerCase().indexOf("chrome") > -1) {
 		window.document.body.innerHTML = "Chrome doesn't like auto redirecting, click <a href=\"" + url +
 			'">here</a> to open the splix.io app.';
@@ -4333,7 +5122,7 @@ const popUp = (url, w, h) => {
 //sets the right color for UI
 //by skinId
 const colorUI = () => {
-	const c = getColorForBlockSkinId(myColorId);
+	const c = getColorForBlockSkinId(game_state.my_player.skinBlock);
 	const mainColor = c.brighter;
 	const edgeColor = c.darker;
 	for (const elem of uiElems) {
@@ -4341,70 +5130,8 @@ const colorUI = () => {
 	}
 }
 
-//styles an element with mainColor and edgeColor;
-const colorBox = (elem, mainColor, edgeColor) => {
-	elem.style.backgroundColor = mainColor;
-	elem.style.boxShadow = "1px 1px " + edgeColor + "," +
-		"2px 2px " + edgeColor + "," +
-		"3px 3px " + edgeColor + "," +
-		"4px 4px " + edgeColor + "," +
-		"5px 5px " + edgeColor + "," +
-		"10px 30px 80px rgba(0,0,0,0.3)";
-}
-
-//called when a skinbutton is pressed
-//add = -1 or 1 (increment/decrement)
-//type = 0 (color) or 1 (pattern)
-function skinButton(add, type) {
-	if (type === 0) {
-		var oldC = localStorage.getItem("skinColor");
-		var hiddenCs = [];
-		if (localStorage.patreonLastPledgedValue >= 300) {
-			//access to patreon color
-		} else {
-			hiddenCs.push(13);
-		}
-		if (oldC === null) {
-			oldC = 0;
-		}
-		oldC = parseInt(oldC);
-		var cFound = false;
-		while (!cFound) {
-			oldC += add;
-			oldC = mod(oldC, SKIN_BLOCK_COUNT + 1);
-			if (hiddenCs.indexOf(oldC) < 0) {
-				cFound = true;
-			}
-		}
-		lsSet("skinColor", oldC);
-	} else if (type == 1) {
-		var oldP = localStorage.getItem("skinPattern");
-		var hiddenPs = [18, 19, 20, 21, 23, 24, 25, 26];
-		if (localStorage.patreonLastPledgedValue > 0) {
-			//access to patreon pattern
-		} else {
-			hiddenPs.push(27);
-		}
-		if (oldP === null) {
-			oldP = 0;
-		}
-		oldP = parseInt(oldP);
-		var pFound = false;
-		while (!pFound) {
-			oldP += add;
-			oldP = mod(oldP, SKIN_PATTERN_COUNT);
-			if (hiddenPs.indexOf(oldP) < 0) {
-				pFound = true;
-			}
-		}
-		lsSet("skinPattern", oldP);
-	}
-
-	updateSkin();
-}
-
-function updateSkin() {
-	var blockId = parseInt(localStorage.skinColor) + 1;
+const updateSkin = () => {
+	const blockId = parseInt(localStorage.skinColor) + 1;
 	skin_screen.state.fillArea(
 		0,
 		0,
@@ -4417,53 +5144,40 @@ function updateSkin() {
 }
 
 //engagement meter
-var engagementIsPlaying = localStorage.engagementIsPlaying == "true";
-var engagementLastPlayTime = localStorage.engagementLastPlayTime;
-if (engagementLastPlayTime === undefined) {
-	engagementLastPlayTime = Date.now();
-}
-var engagementLastNoPlayTime = 0;
-var engagementLastChangeTime = localStorage.engagementLastChangeTime;
-if (engagementLastChangeTime === undefined) {
-	engagementLastChangeTime = Date.now();
-}
-var engagementValue = localStorage.engagementValue;
-if (engagementValue === undefined) {
-	engagementValue = 0.5;
-} else {
-	engagementValue = parseFloat(engagementValue);
-}
-function engagementSetIsPlaying(set) {
-	var now = Date.now();
-	if (set != engagementIsPlaying) {
-		lsSet("engagementIsPlaying", set);
-		engagementIsPlaying = set;
-		var lastSet;
-		if (set) {
-			lastSet = engagementLastNoPlayTime;
-		} else {
-			lastSet = engagementLastPlayTime;
+class Engagement {
+	is_playing = localStorage.engagementIsPlaying == "true";
+	last_play_time = localStorage.engagementLastPlayTime ?? Date.now();
+	last_no_play_time = 0;
+	last_change_time = localStorage.engagementLastChangeTime ?? Date.now();
+	value = parseFloat(localStorage.engagementValue ?? "0.5");
+	set_is_playing(set){
+		const now = Date.now();
+		if (set != this.is_playing) {
+			lsSet("engagementIsPlaying", set);
+			this.is_playing = set;
+			const lastSet = set ? this.last_no_play_time : this.last_play_time;
+			const setDiff = (lastSet - this.last_change_time)/20_000;
+			if (set) {
+				//subtract non play time
+				this.value = lerptt(this.value, 0, 0.01, setDiff / 100);
+			} else {
+				//add play time
+				this.value = lerptt(this.value, 1, 0.01, setDiff);
+			}
+			lsSet("engagementValue", this.value);
+			this.last_change_time = now;
+			lsSet("engagementLastChangeTime", now);
 		}
-		var setDiff = lastSet - engagementLastChangeTime;
-		setDiff /= 20000;
 		if (set) {
-			//subtract non play time
-			engagementValue = lerptt(engagementValue, 0, 0.01, setDiff / 100);
+			lsSet("engagementLastPlayTime", now);
+			this.last_play_time = now;
 		} else {
-			//add play time
-			engagementValue = lerptt(engagementValue, 1, 0.01, setDiff);
+			this.last_no_play_time = now;
 		}
-		lsSet("engagementValue", engagementValue);
-		engagementLastChangeTime = now;
-		lsSet("engagementLastChangeTime", now);
-	}
-	if (set) {
-		lsSet("engagementLastPlayTime", now);
-		engagementLastPlayTime = now;
-	} else {
-		engagementLastNoPlayTime = now;
 	}
 }
+
+const engagement = new Engagement(); // TODO: is this really useful ?
 
 //#region patreon stuff
 /* jshint ignore:start */
@@ -4481,7 +5195,7 @@ function getPatreonRedirectUri() {
 }
 
 function setPatreonOverlay(visible, content) {
-	var el = document.getElementById("patreonOverlay");
+	const el = document.getElementById("patreonOverlay");
 	el.style.display = visible ? null : "none";
 	if (content !== undefined) {
 		document.getElementById("patreonBox").innerHTML = content;
@@ -4534,8 +5248,8 @@ function testPatreonAdsAllowed() {
 //returns true if a patreon code was found
 function checkPatreonQuery() {
 	//if referred after patreon api login
-	var query = parseQuery(location.href);
-	var found = false;
+	const query = parseQuery(location.href);
+	let found = false;
 	if ("code" in query && localStorage.clickedLoginWithPatreonButton == "true") {
 		if (localStorage.skipPatreon == "true") {
 			console.log("code: ", query.code);
@@ -4561,88 +5275,53 @@ function checkPatreonQuery() {
 }
 //#endregion
 
-//gets color object for a player skin id
-function getColorForBlockSkinId(id) {
-	switch (id) {
-		case 0:
-			return colors.red;
-		case 1:
-			return colors.red2;
-		case 2:
-			return colors.pink;
-		case 3:
-			return colors.pink2;
-		case 4:
-			return colors.purple;
-		case 5:
-			return colors.blue;
-		case 6:
-			return colors.blue2;
-		case 7:
-			return colors.green;
-		case 8:
-			return colors.green2;
-		case 9:
-			return colors.leaf;
-		case 10:
-			return colors.yellow;
-		case 11:
-			return colors.orange;
-		case 12:
-			return colors.gold;
-		default:
-			return {
-				brighter: "#000000",
-				darker: "#000000",
-				slightlyBrighter: "#000000",
-			};
-	}
-}
-
 //updates the stats in the bottom left corner
 function updateStats() {
-	if (game_state.my_player.mydata.rank > totalPlayers && myRankSent) {
-		totalPlayers = game_state.my_player.mydata.rank;
-	} else if ((totalPlayers < game_state.my_player.mydata.rank) || (game_state.my_player.mydata.rank === 0 && totalPlayers > 0)) {
-		game_state.my_player.mydata.rank = totalPlayers;
+	if (game_state.my_player.mydata.rank > game_state.total_player && game_connection?.myRankSent) {
+		game_state.total_player = game_state.my_player.mydata.rank;
+	} else if ((game_state.total_player < game_state.my_player.mydata.rank) || (game_state.my_player.mydata.rank === 0 && game_state.total_player > 0)) {
+		game_state.my_player.mydata.rank = game_state.total_player;
 	}
 	myRankElem.innerHTML = game_state.my_player.mydata.rank;
-	totalPlayersElem.innerHTML = totalPlayers;
+	totalPlayersElem.innerHTML = game_state.total_player;
 }
 
-//draws a trail on a canvas, can be drawn on multiple canvases
-//when drawCalls contains more than one object
+/** draws a trail on a canvas, can be drawn on multiple canvases
+ * when drawCalls contains more than one object
+ * @param {DrawCall[]} drawCalls 
+ * @param {*} trail 
+ * @param {Vec2?} lastPos 
+ */
 function drawTrailOnCtx(drawCalls, trail, lastPos) {
 	if (trail.length > 0) {
-		for (var ctxI = 0; ctxI < drawCalls.length; ctxI++) {
-			var thisDrawCall = drawCalls[ctxI];
-			var thisCtx = thisDrawCall.ctx;
-			thisCtx.lineCap = "round";
-			thisCtx.lineJoin = "round";
-			thisCtx.lineWidth = 6;
-			thisCtx.strokeStyle = thisDrawCall.color;
-			var offset = thisDrawCall.offset;
+		for (const draw_call of drawCalls) {
+			const ctx = draw_call.ctx;
+			ctx.lineCap = "round";
+			ctx.lineJoin = "round";
+			ctx.lineWidth = 6;
+			ctx.strokeStyle = draw_call.color;
+			const offset = draw_call.offset;
 
-			thisCtx.beginPath();
-			thisCtx.moveTo(trail[0][0] * 10 + offset, trail[0][1] * 10 + offset);
-			for (var i = 1; i < trail.length; i++) {
-				thisCtx.lineTo(trail[i][0] * 10 + offset, trail[i][1] * 10 + offset);
+			ctx.beginPath();
+			ctx.moveTo(trail[0][0] * 10 + offset, trail[0][1] * 10 + offset);
+			for (const segment of trail) {
+				ctx.lineTo(segment[0] * 10 + offset, segment[1] * 10 + offset);
 			}
 			if (lastPos !== null) {
-				thisCtx.lineTo(lastPos[0] * 10 + offset, lastPos[1] * 10 + offset);
+				ctx.lineTo(lastPos[0] * 10 + offset, lastPos[1] * 10 + offset);
 			}
-			thisCtx.stroke();
+			ctx.stroke();
 		}
 	}
 }
 
 //changes blockId in to a blockId with a pattern applied
 function applyPattern(blockId, pattern, x, y) {
-	var modX, modY;
+	let modX, modY;
 	if (blockId < 2) {
 		return blockId;
 	}
-	var doPattern = false;
+	let doPattern = false;
 	switch (pattern) {
 		case 1:
 			doPattern = (x % 2 === 0) && (y % 2 === 0);
@@ -4740,7 +5419,7 @@ function applyPattern(blockId, pattern, x, y) {
 		case 27:
 		case 28:
 		case 29:
-			var bitMap, bitMapW, bitMapH, xShift = 0, yShift = 0;
+			let bitMap, bitMapW, bitMapH, xShift = 0, yShift = 0;
 			switch (pattern) {
 				case 18:
 					bitMapW = 18;
@@ -4997,102 +5676,15 @@ function applyPattern(blockId, pattern, x, y) {
 	return blockId;
 }
 
-//top notification stuffs
-var currentTopNotifications = [];
-function doTopNotification(text) {
-	var thisTopNotification = {
-		text: text,
-		elem: null,
-		initiate: function () {
-			var el = document.createElement("div");
-			this.elem = el;
-			el.innerHTML = this.text;
-			el.className = "topNotification greenBox";
-			el.style.visibility = "hidden";
-			document.getElementById("topNotifications").appendChild(el);
-			var c = getColorForBlockSkinId(myColorId);
-			var mainColor = c.brighter;
-			var edgeColor = c.darker;
-			colorBox(el, mainColor, edgeColor);
-		},
-		animationTimer: 0,
-		animationDirection: 1,
-		update: function (dt) {
-			this.animationTimer += dt * 0.001 * this.animationDirection;
-			var hiddenPos = -this.elem.offsetHeight - 10;
-			var topPos = lerp(hiddenPos, 10, ease.out(clamp01(this.animationTimer)));
-			this.elem.style.top = topPos + "px";
-			this.elem.style.visibility = null;
-			//if return true, destroy notification object
-			if (this.animationDirection == -1 && this.animationTimer < 0) {
-				this.destroy();
-			}
-		},
-		animateOut: function () {
-			this.animationDirection = -1;
-			if (this.animationTimer > 1) {
-				this.animationTimer = 1;
-			}
-		},
-		destroy: function () {
-			this.elem.parentElement.removeChild(this.elem);
-			for (var notI = currentTopNotifications.length - 1; notI >= 0; notI--) {
-				var not = currentTopNotifications[notI];
-				if (not == this) {
-					currentTopNotifications.splice(notI, 1);
-				}
-			}
-		},
-	};
-	thisTopNotification.initiate();
-	currentTopNotifications.push(thisTopNotification);
-	return thisTopNotification;
-}
-
-//#region touch stuffs
-function bindSwipeEvents() {
-	touchControlsElem.addEventListener("touchstart", onTouchStart);
-	touchControlsElem.addEventListener("touchmove", onTouchMove);
-	touchControlsElem.addEventListener("touchend", onTouchEnd);
-	touchControlsElem.addEventListener("touchcancel", onTouchEnd);
-}
-
-function onTouchStart(e) {
-	var touch = e.touches[e.touches.length - 1];
-	currentTouches.push({
-		prevPos: [touch.pageX, touch.pageY],
-		prevTime: Date.now(),
-		id: touch.identifier,
-	});
-}
-
-function onTouchMove(e) {
-	var touches = e.touches;
-	for (var i = 0; i < touches.length; i++) {
-		var touch = touches[i];
-		var currentTouch = null;
-		for (var j = 0; j < currentTouches.length; j++) {
-			if (currentTouches[j].id == touch.identifier) {
-				currentTouch = currentTouches[j];
-				break;
-			}
-		}
-		if (currentTouch) {
-			calcTouch(currentTouch, touch);
-		}
-	}
-	e.preventDefault();
-}
-
 function calcTouch(customTouch, touch) {
-	var currentTime = Date.now();
-	var deltaTime = currentTime - customTouch.prevTime;
-	var curPos = [touch.pageX, touch.pageY];
-	var prevPos = customTouch.prevPos;
-	var xOffset = prevPos[0] - curPos[0];
-	var yOffset = prevPos[1] - curPos[1];
-	var dist = Math.sqrt(Math.pow(xOffset, 2) + Math.pow(yOffset, 2));
-	var speed = dist / deltaTime;
+	const currentTime = Date.now();
+	const deltaTime = currentTime - customTouch.prevTime;
+	const curPos = [touch.pageX, touch.pageY];
+	const prevPos = customTouch.prevPos;
+	const xOffset = prevPos[0] - curPos[0];
+	const yOffset = prevPos[1] - curPos[1];
+	const dist = Math.sqrt(Math.pow(xOffset, 2) + Math.pow(yOffset, 2));
+	let speed = dist / deltaTime;
 	speed *= MAX_PIXEL_RATIO * canvasQuality;
 	customTouch.prevTime = currentTime;
 	customTouch.prevPos = curPos;
@@ -5108,17 +5700,6 @@ function calcTouch(customTouch, touch) {
 				sendDir(3);
 			} else {
 				sendDir(1);
-			}
-		}
-	}
-}
-
-function onTouchEnd(e) {
-	for (var i = currentTouches.length - 1; i >= 0; i--) {
-		for (var j = 0; j < e.touches.length; j++) {
-			if (currentTouches[i].id == e.touches[j].identifier) {
-				calcTouch(currentTouches[i], e.touches[j]);
-				currentTouches.splice(i, 1);
 			}
 		}
 	}
@@ -5160,555 +5741,10 @@ function getDtCap(index) {
 	return dtCaps[clamp(index, 0, dtCaps.length - 1)];
 }
 
-function toggleQuality() {
-	switch (localStorage.quality) {
-		case "auto":
-			lsSet("quality", "0.4");
-			break;
-		case "0.4":
-			lsSet("quality", "0.7");
-			break;
-		case "0.7":
-			lsSet("quality", "1");
-			break;
-		case "1":
-			lsSet("quality", "auto");
-			break;
-	}
-	setQuality();
-}
-
-var qualityText;
-function setQuality() {
-	if (localStorage.getItem("quality") === null) {
-		lsSet("quality", "1");
-	}
-	if (localStorage.quality != "auto") {
-		canvasQuality = parseFloat(localStorage.quality);
-		qualityText.innerHTML = "Quality: " + {
-			"0.4": "low",
-			"0.7": "medium",
-			"1": "high",
-		}[localStorage.quality];
-	} else {
-		qualityText.innerHTML = "Quality: auto";
-	}
-}
-
-var uglyText;
-function setUglyText() {
-	updateUglyMode();
-	var onOff = uglyMode ? "on" : "off";
-	uglyText.innerHTML = "Ugly mode: " + onOff;
-}
-
-function toggleUglyMode() {
-	window.hc.flags.toggle('uglyMode')
-}
-
 function updateUglyMode() {
 	uglyMode = localStorage.uglyMode == "true";
 }
 
 function setLeaderboardVisibility() {
 	leaderboardDivElem.style.display = leaderboardHidden ? "none" : null;
-}
-
-
-//#region Main loop
-function loop(timeStamp) {
-	debugging.frames += 1;
-	if(timeStamp - debugging.time_start > 1_000) debugging.time_start = timeStamp;
-	var i, lastTrail, t, t2;
-	var realDeltaTime = timeStamp - prevTimeStamp;
-	if (realDeltaTime > lerpedDeltaTime) {
-		lerpedDeltaTime = realDeltaTime;
-	} else {
-		lerpedDeltaTime = lerpt(lerpedDeltaTime, realDeltaTime, 0.05, deltaTime);
-	}
-
-	if (localStorage.quality == "auto" || localStorage.getItem("quality") === null) {
-		if (lerpedDeltaTime > 33) {
-			canvasQuality -= 0.01;
-		} else if (lerpedDeltaTime < 28) {
-			canvasQuality += 0.01;
-		}
-		canvasQuality = Math.min(1, Math.max(0.4, canvasQuality));
-	}
-
-	if (realDeltaTime < lerp(getDtCap(currentDtCap), getDtCap(currentDtCap - 1), 0.9)) {
-		gainedFrames.push(Date.now());
-		while (gainedFrames.length > 190) {
-			if (Date.now() - gainedFrames[0] > 10000) {
-				gainedFrames.splice(0, 1);
-			} else {
-				currentDtCap--;
-				gainedFrames = [];
-				currentDtCap = clamp(currentDtCap, 0, dtCaps.length - 1);
-				break;
-			}
-		}
-	}
-
-	if (realDeltaTime > lerp(getDtCap(currentDtCap), getDtCap(currentDtCap + 1), 0.05)) {
-		missedFrames.push(Date.now());
-		gainedFrames = [];
-		while (missedFrames.length > 5) {
-			if (Date.now() - missedFrames[0] > 5000) {
-				missedFrames.splice(0, 1);
-			} else {
-				currentDtCap++;
-				missedFrames = [];
-				currentDtCap = clamp(currentDtCap, 0, dtCaps.length - 1);
-				break;
-			}
-		}
-	}
-
-	deltaTime = realDeltaTime + totalDeltaTimeFromCap;
-	prevTimeStamp = timeStamp;
-	if (deltaTime < getDtCap(currentDtCap) && localStorage.dontCapFps != "true") {
-		totalDeltaTimeFromCap += realDeltaTime;
-	} else {
-		totalDeltaTimeFromCap = 0;
-		//main canvas
-		if(playingAndReady){
-			main_canvas.render(timeStamp,deltaTime);
-		}
-		//corner stats
-		scoreStat = lerpt(scoreStat, scoreStatTarget, 0.1, deltaTime);
-		myScoreElem.innerHTML = Math.round(scoreStat);
-		realScoreStat = lerpt(realScoreStat, realScoreStatTarget, 0.1, deltaTime);
-		myRealScoreElem.innerHTML = Math.round(realScoreStat);
-
-		//transition canvas
-		if (isTransitioning) {
-			transition_canvas.render(deltaTime);
-		}
-
-		//lives
-		life_box.renderAllLives(deltaTime);
-
-		//top notification
-		for (var topNotificationI = currentTopNotifications.length - 1; topNotificationI >= 0; topNotificationI--) {
-			var thisTopNotification = currentTopNotifications[topNotificationI];
-			thisTopNotification.update(deltaTime);
-		}
-
-		engagementSetIsPlaying(playingAndReady && (Date.now() - lastSendDirTime) < 20000);
-
-		//title
-		if (beginScreenVisible && timeStamp - title_canvas.lastRender > 49) {
-			title_canvas.render(timeStamp);
-		}
-
-		//tutorial canvas
-		if (beginScreenVisible) {
-			tutorial.render(timeStamp,deltaTime);
-		}
-
-		//skin button
-		if (beginScreenVisible) {
-			skin_button.render(deltaTime);
-		}
-
-		//skin screen canvas
-		if (skin_screen.visible) {
-			skin_screen.render(deltaTime);
-		}
-
-		//lastStats
-		if (beginScreenVisible) {
-			lastStatTimer += deltaTime;
-			t = lastStatTimer / 2000;
-			if (t > 1) {
-				lastStatTimer = 0;
-				lastStatCounter++;
-				if (lastStatCounter > 5) {
-					lastStatCounter = 0;
-				}
-
-				if (lastStatCounter === 0) {
-					if (lastStat.no1_time <= 0 && bestStat.no1_time <= 0) {
-						lastStatCounter++;
-					} else {
-						lastStatValueElem.innerHTML = parseTimeToString(lastStat.no1_time) + " on #1";
-						bestStatValueElem.innerHTML = parseTimeToString(bestStat.no1_time) + " on #1";
-					}
-				}
-				if (lastStatCounter == 1) {
-					if (lastStatKiller === "" && lastStatKiller.replace(/\s/g, "").length > 0) {
-						lastStatCounter++;
-					} else {
-						lastStatValueElem.innerHTML = "killed by " + filter(htmlEscape(lastStatKiller));
-						bestStatValueElem.innerHTML = "";
-					}
-				}
-				if (lastStatCounter == 2) {
-					if (lastStat.kills <= 0 && bestStat.kills <= 0) {
-						lastStatCounter++;
-					} else {
-						var killsS = lastStat.kills == 1 ? "" : "s";
-						lastStatValueElem.innerHTML = lastStat.kills + " player" + killsS + " killed";
-						var killsS2 = bestStat.kills == 1 ? "" : "s";
-						bestStatValueElem.innerHTML = bestStat.kills + " player" + killsS2 + " killed";
-					}
-				}
-				if (lastStatCounter == 3) {
-					lastStatValueElem.innerHTML = parseTimeToString(lastStat.alive) + " alive";
-					bestStatValueElem.innerHTML =
-						parseTimeToString(Math.max(lastStat.alive, localStorage.getItem("bestStatAlive"))) + " alive";
-				}
-				if (lastStatCounter == 4) {
-					if (lastStat.blocks <= 0 && bestStat.blocks <= 0) {
-						lastStatCounter++;
-					} else {
-						const blockS = lastStat.blocks == 1 ? "" : "s";
-						lastStatValueElem.innerHTML = lastStat.blocks + " block" + blockS + " captured";
-						const blockS2 = bestStat.blocks == 1 ? "" : "s";
-						bestStatValueElem.innerHTML = bestStat.blocks + " block" + blockS2 + " captured";
-					}
-				}
-				if (lastStatCounter == 5) {
-					if (lastStat.leaderboard_rank <= 0 && bestStat.leaderboard_rank <= 0) {
-						lastStatCounter = 0;
-					} else {
-						lastStatValueElem.innerHTML = lastStat.leaderboard_rank == 0 ? "" : "#" + lastStat.leaderboard_rank + " highest rank";
-						bestStatValueElem.innerHTML = bestStat.leaderboard_rank == 0 ? "" : "#" + bestStat.leaderboard_rank + " highest rank";
-					}
-				}
-			}
-			var speed = 5;
-			lastStatValueElem.style.opacity = bestStatValueElem.style.opacity = speed - Math.abs((t - 0.5) * speed * 2);
-		}
-
-		if (beginScreenVisible) {
-			if (Date.now() - lastNameChangeCheck > 1000) {
-				if (lastNameValue != nameInput.value) {
-					nameInputOnChange();
-					lastNameValue = nameInput.value;
-				}
-				lastNameChangeCheck = Date.now();
-			}
-		}
-
-		//debug info (red ping stats)
-		if (localStorage.drawDebug == "true") {
-			if(game_connection !== null){
-				const avg = Math.round(game_connection.serverAvgPing);
-				const last = Math.round(game_connection.serverLastPing);
-				const diff = Math.round(game_connection.serverDiffPing);
-				const str = "avg:" + avg + " last:" + last + " diff:" + diff + " fps:" + Math.round(debugging.getFPS());
-				main_canvas.ctx.font = "14px Arial, Helvetica, sans-serif";
-				main_canvas.ctx.fillStyle = colors.red.brighter;
-				const textWidth = main_canvas.ctx.measureText(str).width;
-				main_canvas.ctx.fillText(str, main_canvas.canvas.width - textWidth - 10, main_canvas.canvas.height - 10);
-			}
-		}
-
-		//ping overload test
-		// if(Date.now() - lastPingOverloadTestTime > 10000){
-		// 	lastPingOverloadTestTime = Date.now();
-		// 	if(pingOverLoadWs !== null && pingOverLoadWs.readyState == WebSocket.OPEN){
-		// 		pingOverLoadWs.close();
-		// 	}
-		// 	pingOverLoadWs = new WebSocket("ws://37.139.24.137:7999/overloadTest");
-		// 	pingOverLoadWs.onopen = function(){
-		// 		pingOverLoadWs.send(new Uint8Array([0]));
-		// 	};
-		// }
-	}
-
-	// if my position confirmation took too long
-	var clientSideSetPosPassed = Date.now() - lastMyPosSetClientSideTime;
-	var clientSideValidSetPosPassed = Date.now() - lastMyPosSetValidClientSideTime;
-	var serverSideSetPosPassed = Date.now() - lastMyPosServerSideTime;
-	// console.log(clientSideSetPosPassed, clientSideValidSetPosPassed, serverSideSetPosPassed);
-	if (
-		clientSideValidSetPosPassed > WAIT_FOR_DISCONNECTED_MS &&
-		serverSideSetPosPassed - clientSideSetPosPassed > WAIT_FOR_DISCONNECTED_MS && !game_state.my_player.isDead
-	) {
-		if (!connectionLostNotification) {
-			connectionLostNotification = doTopNotification(
-				"It seems like you're disconnected. Please check your connection.",
-			);
-		}
-	} else {
-		if (connectionLostNotification) {
-			connectionLostNotification.animateOut();
-			connectionLostNotification = null;
-		}
-	}
-
-	if(game_connection !== null){
-		const maxPingTime = game_connection.waitingForPing ? 10000 : 5000;
-		if (Date.now() - game_connection.lastPingTime > maxPingTime) {
-			game_connection.lastPingTime = Date.now();
-			if (game_connection.wsSendMsg(sendAction.PING)) {
-				game_connection.waitingForPing = true;
-			}
-		}
-	}
-
-	// if(window.innerWidth != prevWindowWidth || window.innerHeight != prevWindowHeight){
-	// 	prevWindowWidth = window.innerWidth;
-	// 	prevWindowHeight = window.innerHeight;
-	// 	onResize(prevWindowWidth, prevWindowHeight);
-	// }
-
-	parseGamepads();
-
-	window.requestAnimationFrame(loop);
-}
-//#endregion
-
-var gamePadIsHonking = false;
-var customMappings = [
-	{
-		name: "Generic USB Joystick", //https://twitter.com/Mat2095/status/765566729812598784
-		buttonMap: {
-			0: 2,
-			1: 1,
-			2: 3,
-			3: 0,
-			4: 4,
-			5: 5,
-			6: 6,
-			7: 7,
-			8: 8,
-			9: 9,
-			10: 10,
-			11: 11,
-			12: 13,
-			13: 14,
-			14: 15,
-			15: 16,
-		},
-		axesMap: { 0: 0, 1: 1, 2: 2, 3: 4 },
-	},
-	{
-		name: "Bluetooth Gamepad", //https://twitter.com/2zqa_MC/status/765933750416994304 https://twitter.com/2zqa_MC/status/765606843339182084
-		buttonMap: {
-			0: 0,
-			1: 1,
-			2: 3,
-			3: 4,
-			4: 6,
-			5: 7,
-			6: 8,
-			7: 9,
-			8: 10,
-			9: 11,
-			10: 13,
-			11: 14,
-			12: 12,
-			13: 13,
-			14: 14,
-			15: 15,
-		},
-		axesMap: { 0: 0, 1: 1, 2: 2, 3: 5 },
-		//12 = axis 9 (-1.0)
-		//13 = axis 9 (0.142857)
-		//14 = axis 9 (0.714286)
-		//15 = axis 9 (-0.428571)
-	},
-	{
-		name: "USB DancePad",
-		buttonMap: {
-			0: 6,
-			1: 7,
-			2: 2,
-			3: 3,
-			4: 4,
-			5: 5,
-			6: 6,
-			7: 7,
-			8: 8,
-			9: 9,
-			10: 10,
-			11: 11,
-			12: 0,
-			13: 1,
-			14: 2,
-			15: 3,
-		},
-		axesMap: { 0: 0, 1: 1, 2: 2, 3: 4 },
-	},
-];
-
-var currentGamepad;
-var currentMap = {
-	buttonMap: {
-		0: 0,
-		1: 1,
-		2: 2,
-		3: 3,
-		4: 4,
-		5: 5,
-		6: 6,
-		7: 7,
-		8: 8,
-		9: 9,
-		10: 10,
-		11: 11,
-		12: 12,
-		13: 13,
-		14: 14,
-		15: 15,
-	},
-	axesMap: { 0: 0, 1: 1, 2: 2, 3: 3 },
-};
-function getButton(id) {
-	if (currentGamepad) {
-		if (currentGamepad.buttons) {
-			var button = currentGamepad.buttons[currentMap.buttonMap[id]];
-			if (button) {
-				return button.pressed;
-			}
-		}
-	}
-	return false;
-}
-
-function getAxis(id) {
-	if (currentGamepad) {
-		if (currentGamepad.axes) {
-			var axis = currentGamepad.axes[currentMap.axesMap[id]];
-			if (axis !== undefined) {
-				return axis;
-			}
-		}
-	}
-	return 0;
-}
-
-function parseGamepads() {
-	if ("getGamepads" in navigator) {
-		var gamepads = navigator.getGamepads();
-		var honkButtonPressedAnyPad = false;
-		for (var i = 0; i < gamepads.length; i++) {
-			currentGamepad = gamepads[i];
-			if (currentGamepad !== undefined && currentGamepad !== null) {
-				var validGamepad = false;
-				if (currentGamepad.mapping == "standard") {
-					currentMap = {
-						buttonMap: {
-							0: 0,
-							1: 1,
-							2: 2,
-							3: 3,
-							4: 4,
-							5: 5,
-							6: 6,
-							7: 7,
-							8: 8,
-							9: 9,
-							10: 10,
-							11: 11,
-							12: 12,
-							13: 13,
-							14: 14,
-							15: 15,
-						},
-						axesMap: { 0: 0, 1: 1, 2: 2, 3: 3 },
-					};
-					validGamepad = true;
-				} else {
-					for (var j = 0; j < customMappings.length; j++) {
-						if (currentGamepad.id.indexOf(customMappings[j].name) >= 0) {
-							validGamepad = true;
-							currentMap = customMappings[j];
-						}
-					}
-				}
-				if (validGamepad) {
-					if (getButton(12)) { //up
-						sendDir(3);
-					}
-					if (getButton(13)) { //down
-						sendDir(1);
-					}
-					if (getButton(14)) { //left
-						sendDir(2);
-					}
-					if (getButton(15)) { //right
-						sendDir(0);
-					}
-					if (getButton(0)) { // X / A
-						honkButtonPressedAnyPad = true;
-					}
-					if (getButton(1)) { // O / B
-						doSkipDeathTransition();
-					}
-					if (getButton(9)) { // pause
-						sendDir(4);
-					}
-					if (getAxis(0) < -0.9 || getAxis(2) < -0.9) { //left
-						sendDir(2);
-					}
-					if (getAxis(0) > 0.9 || getAxis(2) > 0.9) { //right
-						sendDir(0);
-					}
-					if (getAxis(1) < -0.9 || getAxis(3) < -0.9) { //up
-						sendDir(3);
-					}
-					if (getAxis(1) > 0.9 || getAxis(3) > 0.9) { //down
-						sendDir(1);
-					}
-				}
-			}
-		}
-
-		if (honkButtonPressedAnyPad) { // X / A
-			if (beginScreenVisible) {
-				connectWithTransition();
-			} else if (!gamePadIsHonking) {
-				gamePadIsHonking = true;
-				honkStart();
-			}
-		} else {
-			if (gamePadIsHonking) {
-				gamePadIsHonking = false;
-				honkEnd();
-			}
-		}
-	}
-}
-
-//http://stackoverflow.com/a/7124052/3625298
-const htmlEscape = str => {
-	return String(str)
-		.replace(/&/g, "&amp;")
-		.replace(/"/g, "&quot;")
-		.replace(/'/g, "&#39;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;");
-}
-
-const swearArr = [];
-simpleRequest("./static/swearList.txt", result => {
-	swearArr.push(...(result.split("\n").filter(n => n)));
-});
-const swearRepl = "balaboo";
-function filter(str) {
-	str = str.replace(/[卐卍]/g, "❤");
-	const words = str.split(" ");
-	for (let i = 0; i < words.length; i++) {
-		let word = words[i];
-		const wasAllUpper = word.toUpperCase() == word;
-		for (const swear of swearArr) {
-			if (word.toLowerCase().indexOf(swear) >= 0) {
-				if (word.length < swear.length + 2) {
-					word = swearRepl;
-				} else {
-					word = word.toLowerCase().replace(swear, swearRepl);
-				}
-			}
-		}
-		if (wasAllUpper) {
-			word = word.toUpperCase();
-		}
-		words[i] = word;
-	}
-	return words.join(" ");
 }

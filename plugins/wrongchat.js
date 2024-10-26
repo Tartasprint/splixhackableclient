@@ -1034,7 +1034,6 @@ class WCPlayer extends Player {
 }
 
 Player = WCPlayer;
-honkEnd = honkEnd;
  
 var style = `
 #chatbox {
