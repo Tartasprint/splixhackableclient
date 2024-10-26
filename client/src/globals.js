@@ -1,2 +1,2 @@
-globalThis.IS_DEV_BUILD = false;
-globalThis.CLIENT_VERSION = 0;
+IS_DEV_BUILD = false;
+CLIENT_VERSION = 0;

@@ -1059,9 +1059,6 @@ class SplixBaseCamera extends SplixBaseCanvas {
 					}
 					//empty block
 					if (block.currentBlock == 1) {
-						//BG
-						this.ctx.fillStyle = colors.grey.BG;
-						this.ctx.fillRect(block.x * 10, block.y * 10, 10, 10);
 						//shadow edge
 						if (t > 0.8 && !uglyMode) {
 							this.ctx.fillStyle = colors.grey.darker;
@@ -1567,6 +1564,7 @@ class SplixCanvas extends SplixBaseCamera {
 	 * @param {number} deltaTime 
 	 */
 	render(timeStamp,deltaTime){
+		debugging.frames += 1;
 		const ctx = this.ctx;
 		this.setCanvasSize();
 		if (!uglyMode) {
@@ -1583,7 +1581,7 @@ class SplixCanvas extends SplixBaseCamera {
 
 		//cam transforms
 		this.camPosPrevFrame = [this.camPos[0], this.camPos[1]];
-		this.calcCamOffset();
+		this.calcCamOffset(deltaTime);
 		this.ctxApplyCamTransform(false,false,ctx);
 		if (!uglyMode) {
 			this.ctxApplyCamTransform(false,false,this.linesCtx);
@@ -1594,12 +1592,8 @@ class SplixCanvas extends SplixBaseCamera {
 
 		//players
 		for (const player of game_state.players.values()) {
-			player.update(deltaTime);
 			this.drawPlayer(player, timeStamp, deltaTime);
 		}
-
-		//change dir queue
-		game_connection.render();
 
 		if (!uglyMode) {
 			this.drawDiagonalLines(this.linesCtx, "white", 5, 10, timeStamp * 0.008);
@@ -1644,6 +1638,7 @@ class SplixCanvas extends SplixBaseCamera {
 				this.camRotOffset += Math.cos(t * 9) * 0.003 * t3;
 			}
 		}
+		if(this.camPosOffset[0] != 0 && this.camPosOffset[1] != 0) console.log(this.camPosOffset);
 		const limit = 80;
 		this.camPosOffset[0] /= limit;
 		this.camPosOffset[1] /= limit;
@@ -1654,7 +1649,7 @@ class SplixCanvas extends SplixBaseCamera {
 	}
 
 	//shakes the camera but uses a dir (ranges from 0-3) as input
-	doCamShakeDir(dir, amount, doRotate) {
+	doCamShakeDir(dir, amount, doRotate) { // BUG
 		if (amount === undefined) {
 			amount = 6;
 		}
@@ -3038,8 +3033,10 @@ class RenderingLoop {
 	gainedFrames = [];
 	constructor(){}
 	loop(timeStamp) {
-		debugging.frames += 1;
-		if(timeStamp - debugging.time_start > 1_000) debugging.time_start = timeStamp;
+		if(timeStamp - debugging.time_start > 500) {
+			debugging.time_start = timeStamp;
+			debugging.frames = 0;
+		}
 
 		const realDeltaTime = timeStamp - this.prevTimeStamp;
 		if (realDeltaTime > this.lerpedDeltaTime) {
@@ -3094,6 +3091,10 @@ class RenderingLoop {
 			this.totalDeltaTimeFromCap = 0;
 			//main canvas
 			if(playingAndReady){
+				// update the player positions
+				game_state.update(this.deltaTime);
+				// change dir queue
+				game_connection.render();
 				main_canvas.render(timeStamp,this.deltaTime);
 			}
 			//corner stats
@@ -3361,13 +3362,18 @@ class SplixState {
 	 * @returns {Block}
 	 */
 	getBlock(x, y) {
-		if(this.blocks.has([x,y])){
-			return this.blocks.get([x,y]);
+		const hash = SplixState.hash_vec2(x,y);
+		if(this.blocks.has(hash)){
+			return this.blocks.get(hash);
 		} else {
 			const block = new Block(x,y);
-			this.blocks.set([x,y], block);
+			this.blocks.set(hash, block);
 			return block;
 		}
+	}
+
+	static hash_vec2(x,y){
+		return x*1_000_000+y;
 	}
 
 	//fills an area, if array is not specified it defaults to blocks[]
@@ -3399,14 +3405,14 @@ class SplixState {
 	 * @param {Vec2} pos
 	 */
 	removeBlocksOutsideViewport(pos) {
-		for(const [x,y] of this.blocks.keys()){
+		for(const [hash,block] of this.blocks){
 			if (
-				x < pos[0] - VIEWPORT_RADIUS * 2 ||
-				x > pos[0] + VIEWPORT_RADIUS * 2 ||
-				y < pos[1] - VIEWPORT_RADIUS * 2 ||
-				y > pos[1] + VIEWPORT_RADIUS * 2
+				block.x < pos[0] - VIEWPORT_RADIUS * 2 ||
+				block.x > pos[0] + VIEWPORT_RADIUS * 2 ||
+				block.y < pos[1] - VIEWPORT_RADIUS * 2 ||
+				block.y > pos[1] + VIEWPORT_RADIUS * 2
 			) {
-				this.blocks.delete([x,y]);
+				this.blocks.delete(hash);
 			}
 		}
 	}
@@ -3429,6 +3435,11 @@ class SplixState {
 		}
 	}
 
+	update(deltaTime){
+		for (const player of this.players.values()) {
+			player.update(deltaTime);
+		}
+	}
 }
 
 class Player extends EventTarget {
@@ -4724,7 +4735,7 @@ class GameConnection {
 			const type = data[9];
 			const pattern = data[10];
 			const isEdgeChunk = data[11];
-			game_state.fillArea(x, y, w, h, type, pattern, undefined, isEdgeChunk);
+			game_state.fillArea(x, y, w, h, type, pattern, isEdgeChunk);
 		}
 		if (data[0] == receiveAction.SET_TRAIL) {
 			const id = bytesToInt(data[1], data[2]);
