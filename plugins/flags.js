@@ -1,13 +1,24 @@
 class Flag  extends EventTarget {
-    constructor(container,id,input,init,label,context, options){
+    ui;
+    id;
+    input;
+    defaultValue;
+    label;
+    context;
+    options;
+    keywords;
+    __visible = false;
+    constructor(container,id,input,init,label,context,keywords, options){
         super();
+        this.ui = {};
+        this.ui.container = container;
         this.id=id;
-        this.input=document.createElement('input');
-        this.input.type=input;
-        this.input.name='hcFlag'+id;
-        this.input.dataset.id=id;
-        this.defaultValue = init;
-        this.__visible = false;
+        this.input=input;
+        this.defaultValue=init;
+        this.label=label;
+        this.context=context||null;
+        this.keywords=keywords;
+        this.options=options;
         this.store=options.store || (x=>({"v":x, ok: true}));
         this.restore=options.restore;
         if(this.restore === undefined){
@@ -22,39 +33,26 @@ class Flag  extends EventTarget {
         }
         this.interpret=options.interpret || (x=>({"v":x, ok: true}));
         this.present=options.present || (x=>({"v":x, ok: true}));
+        this.makeUI();
         this.value=this.getLocalStorage();
-        this.input.addEventListener('change', ()=>{
-            this.value=this.getUI();
-        })
-        this.label=document.createElement('label');
-        this.label.htmlFor=this.input.name;
-        this.label.textContent=label;
-        container.append(this.label,this.input);
-        if(context !== undefined){
-            this.context = document.createElement('p');
-            this.context.innerHTML = context;
-            container.append(this.context);
-        } else {
-            this.context = null;
-        }
-        if(input === 'checkbox'){
+        if(this.input === 'checkbox'){
             window.hc.km.add_action({
-                    name: 'flags_toggleFlag_'+id,
-                    short: 'toggle flag: ' + label,
+                    name: 'flags_toggleFlag_'+this.id,
+                    short: 'toggle flag: ' + this.label,
                     down:()=>{this.value=!this.value;},
                     norepeat: false,
                 });
             window.hc.km.add_action({
-                name: 'flags_peekFlag_'+id,
-                short: 'peek flag: ' + label,
+                name: 'flags_peekFlag_'+this.id,
+                short: 'peek flag: ' + this.label,
                 down:()=>{this.value=!this.value;},
                 up:()=>{this.value=!this.value;},
                 norepeat: true,
             });
         } else if(input === 'number'){
-            if(options.min !== undefined) this.input.min = options.min;
-            if(options.max !== undefined) this.input.max = options.max;
-            if(options.step !== undefined) this.input.step = options.step;
+            if(this.options.min !== undefined) this.ui.input.min = this.options.min;
+            if(this.options.max !== undefined) this.ui.input.max = this.options.max;
+            if(this.options.step !== undefined) this.ui.input.step = this.options.step;
         }
     }
 
@@ -66,10 +64,10 @@ class Flag  extends EventTarget {
     setUI(val){
         let {v,ok} = this.present(val);
         v=ok?v:this.present(this.defaultValue).v;
-        if(this.input.type === 'checkbox'){
-            this.input.checked = v;
+        if(this.ui.input.type === 'checkbox'){
+            this.ui.input.checked = v;
         } else {
-            this.input.value = v;
+            this.ui.input.value = v;
         }
     }
 
@@ -88,15 +86,34 @@ class Flag  extends EventTarget {
 
     getUI(){
         let v;
-        if(this.input.type === 'checkbox'){
-            v = this.input.checked;
-        } else if(this.input.type === 'number') {
-            v = !Number.isNaN(this.input.valueAsNumber) ? this.input.valueAsNumber : (this.value=this.defaultValue);
+        if(this.ui.input.type === 'checkbox'){
+            v = this.ui.input.checked;
+        } else if(this.ui.input.type === 'number') {
+            v = !Number.isNaN(this.ui.input.valueAsNumber) ? this.ui.input.valueAsNumber : (this.value=this.defaultValue);
         } else {
             v = this.input.value;
         }
         v=this.interpret(v);
         return v.ok ? v.v:(this.value=this.defaultValue);
+    }
+
+    makeUI(){
+        this.ui.input=document.createElement('input');
+        this.ui.input.type=this.input;
+        this.ui.input.name='hcFlag'+this.id;
+        this.ui.input.dataset.id=this.id;
+        this.ui.input.addEventListener('change', ()=>{
+            this.value=this.getUI();
+        });
+        this.ui.label=document.createElement('label');
+        this.ui.label.htmlFor=this.ui.input.name;
+        this.ui.label.textContent=this.label;
+        this.ui.container.append(this.ui.label,this.ui.input);
+        if(this.context !== null){
+            this.ui.context = document.createElement('p');
+            this.ui.context.innerHTML = this.context;
+            this.ui.container.append(this.ui.context);
+        }
     }
 
     set value(v){
@@ -140,9 +157,13 @@ class FlagEditor {
         this.flags= new Map();
         this.ui = {
             container: document.createElement('dialog'),
+            searchbar: document.createElement('input'),
             list: document.createElement('ul'),
         }
-        this.ui.container.append(this.ui.list);
+        this.ui.container.append(this.ui.searchbar,this.ui.list);
+        this.searchbox = new SearchBox(this.ui.searchbar,this.ui.list);
+        this.ui.searchbar.classList.add('hc-flags-searchbar');
+        this.ui.searchbar.placeholder = "Search a flag";
         this.ui.container.classList.add('hc-flags-container','hc-menu-container');
         this.ui.container.addEventListener('close', ()=>{
             hc.km.enable();
@@ -173,12 +194,15 @@ class FlagEditor {
         "caption": label,
         "description": context,
         "type": input,
+        "keywords" : keywords,
         "default": init,
         ...options
     } = params){
         const li = document.createElement('li');
         li.classList.add('hc-flags-flag');
-        this.flags.set(id,new Flag(li,id,input,init,label,context,options));
+        const flag = new Flag(li,id,input,init,label,context,keywords,options);
+        this.flags.set(id,flag);
+        this.searchbox.store.push(new SearchResult(flag.ui.container,flag.keywords));
         this.ui.list.append(li);
     }
 
@@ -219,6 +243,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             "name": "drawDebug",
             "caption": "Display ping",
             "description": "Displays a tiny red number in the bottom right corner while playing.<br>This is your ping (amount of ms delay with the server)<br>Anything below 100 should be good",
+            "keywords" : ["display", "ping", "red", "number" ,"delay", "latency"],
             "type": "checkbox",
             "default": "false"
         },
@@ -226,6 +251,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             "name": "dontCapFps",
             "caption": "Dont cap fps",
             "description": "To keep the frame rate stable, it is automatically locked to 144, 60, 30, 20 or 10fps, depending on how fast your computer is. If you check this box it doesn't lock the framerate.<br>This causes a higher framerate but it feels more like the game is stuttering.",
+            "keywords": ["cap","fps","frame","frames","per","second","framerate","rate","stuttering"],
             "type": "checkbox",
             "default": "false"
         },
@@ -233,6 +259,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             "name": "drawActualPlayerPos",
             "caption": "Show actual player pos",
             "description": "To make the game feel less laggy, the place where your player is drawn is not its actual position. If you check this checkbox the game will draw a second dot on the position where the server thinks you actually are.",
+            "keywords": ["draw","show", "actual", "player", "lag", "real", "dot", "server","position"],
             "type": "checkbox",
             "default": "false"
         },
@@ -240,6 +267,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             "name": "drawWhiteDot",
             "caption": "Draw a white dot on my player",
             "description": "Useful for tracking the player position when making youtube videos.",
+            "keywords": ["draw","white","dot","player","tracking","position","video"],
             "type": "checkbox",
             "default": "false"
         },
@@ -248,12 +276,14 @@ document.addEventListener('DOMContentLoaded',()=>{
             "caption": "Don't slow down the player with high ping",
             "description": "When you're running too far ahead according to the server, it starts slowing you down to make up for it. This makes sure that your land gets filled once you reach it, instead of a couple of blocks later. The downside is that your player is slower compared to the other players. To prevent this, check this box. But be warned: Your blocks will be filled with a short delay and players are able to kill you in that short time.",
             "type": "checkbox",
+            "keywords": ["dont","slow","down","player","high","ping","server","slowing"],
             "default": "false"
         },
         {
             "name": "hidePlayerNames",
             "caption": "Hide player names",
             "description": "Hides the name above players.",
+            "keywords": ["hide","name","player","nickname","show"],
             "type": "checkbox",
             "default": "false"
         },
@@ -261,6 +291,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             "name": "uglyMode",
             "caption": "Ugly mode",
             "description": "In case your fps is too low. Warning! Makes the game ugly. (This is subjective).",
+            "keywords": ["ugly","mode","fps","frame","per","second"],
             "type": "checkbox",
             "default": "false"
         },
@@ -268,6 +299,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             "name": "leaderboardHidden",
             "caption": "Hide the leaderboard",
             "description": "Hides the leaderboard when playing.",
+            "keywords": ["hide","show","leaderboard"],
             "type": "checkbox",
             "default": "false"
         },
@@ -275,6 +307,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             "name": "simulatedLatency",
             "caption": "Simulate latency",
             "description": "This increases the lag, there's absolutely no reason why you would want to enable this unless you're debugging stuff. This is also makes things very unstable so you might want to avoid using it.<br>Set this to 0 to disable it.",
+            "keywords": ["simulate","latency","lag","debugging"],
             "type": "number",
             "default": "0"
         },
@@ -282,6 +315,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             "name": "menuOpacity",
             "caption": "Menu opacity while playing",
             "description": "To not miss anything in the game while you open a menu, you can make it translucent.",
+            "keywords": ["menu","opacity","translucent","transparent"],
             "type": "number",
             "default": "0.7",
             "min": "0",
@@ -305,6 +339,14 @@ document.addEventListener('DOMContentLoaded',()=>{
         
         .hc-flags-container label {
             padding-right: 1rem;   
+        }
+
+        .hc-flags-searchbar {
+            width: 50%;
+            padding: 0 1em;
+            margin: 0 25%;
+            box-sizing: border-box;
+            border-radius: 100vh;
         }
     `)
     window.hc.km.add_action({

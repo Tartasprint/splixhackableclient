@@ -6,6 +6,7 @@ var wcFlagList = [
         "name": "wcConvertEmoticons",
         "caption": "Convert emoticons in your messages to emoji",
         "description": ":D ⟶ 😄",
+        "keywords": ["convert","emoticons","emoji","message"],
         "type": "checkbox",
         "default": true
     },
@@ -13,6 +14,7 @@ var wcFlagList = [
         "name": "wcConsoleLog",
         "caption": "Print messages to the browser console",
         "description": "Until the page is refreshed, you can see the message history in the console.",
+        "keywords": ["print","messages","browser","console","history"],
         "type": "checkbox",
         "default": true
     },
@@ -20,6 +22,7 @@ var wcFlagList = [
         "name": "wcConsoleLogTimeAmPm",
         "caption": "Use AM/PM time format for console log",
         "description": "Uncheck if you want to use 24 hour format",
+        "keywords": ["console","log","am","pm","time","format","hour","24"],
         "type": "checkbox",
         "default": true
     },
@@ -27,6 +30,7 @@ var wcFlagList = [
         "name": "wcMsgDisplayTime",
         "caption": "Message display time",
         "description": "The total display time (seconds) of the message.<br>If this value is zero, messages will only be deleted when the message limit is reached.",
+        "keywords": ["message","display","time"],
         "type": "number",
         "default": 90,
         "min": 0,
@@ -36,6 +40,7 @@ var wcFlagList = [
         "name": "wcMsgDecayTime",
         "caption": "Message decay time",
         "description": "The time (seconds) during which the messages fade out.<br>It is part of the total display time.",
+        "keywords": ["message","decay","time","fade","out","display"],
         "type": "number",
         "default": 20,
         "min": 0,
@@ -45,6 +50,7 @@ var wcFlagList = [
         "name": "wcMessageLimit",
         "caption": "Number of messages on screen",
         "description": "Maximum number of messages displayed on the screen.",
+        "keywords": ["message","number","maximum","screen","limit"],
         "type": "number",
         "default": 20,
         "min": 0,
@@ -54,6 +60,7 @@ var wcFlagList = [
         "name": "wcDefaultNotifications",
         "caption": "Show default notifications",
         "description": "Show default splix.io notifications instead of bottom right corner notifications.<br>This parameter only affects the notifications shown by the Wrong Chat script.",
+        "keywords": ["default","notification","right","corner"],
         "type": "checkbox",
         "default": false
     },
@@ -61,6 +68,7 @@ var wcFlagList = [
         "name": "wcPrivacyWarnings",
         "caption": "Enable privacy warnings",
         "description": "Disable this flag if you understand the risks of communicating in this chat.<br>Even if you don't see anyone nearby, someone can see your messages.<br>Also, do not disclose important information as the interlocutor may impersonate someone else.",
+        "keywords": ["privacy","warning","risk"],
         "type": "checkbox",
         "default": true
     },
@@ -68,6 +76,7 @@ var wcFlagList = [
         "name": "wcBlockedPlayers",
         "caption": "Blocked players",
         "description": "List of blocked players in JSON format.<br>Clear the field if you want to clear the list.",
+        "keywords": ["list","blocked","players","ban"],
         "type": "text",
         "default": {},
         "store": flagTalkers.JSON.from,

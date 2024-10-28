@@ -5294,7 +5294,7 @@ function updateStats() {
 		game_state.my_player.mydata.rank = game_state.total_player;
 	}
 	myRankElem.innerHTML = game_state.my_player.mydata.rank;
-	totalPlayersElem.innerHTML = game_state.total_player;
+	totalPlayersElem.innerHTML = game_state.total_players;
 }
 
 /** draws a trail on a canvas, can be drawn on multiple canvases

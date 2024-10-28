@@ -1,6 +1,8 @@
+/** @typedef {{name: string, short: string, down?: () => {}, up?: () => {}, norepeat: boolean}} Action */
 class KeyboardManager {
     constructor(){
         this.shortcuts = new Map();
+        /** @type {Map<string,Action>} */
         this.actions = new Map();
         this.listen=this.listen.bind(this);
         this.uitask=[];
@@ -106,6 +108,7 @@ class KeyboardManager {
                 "name": "km_shortcuts",
                 "caption": "Keyboard Manager Shortcuts",
                 "description": "You should not edit this. You can save/share your shortcuts by copy/pasting the text into/from a file.",
+                "keywords": ["keyboard","manager","shortcuts"],
                 "type": "text",
                 "default": [],
                 "store": flagTalkers.JSON.from,
@@ -129,25 +132,34 @@ class KeyboardManager {
         this.hideUI();
     }
 
-    add_shortcut(shortcut,action,up=undefined){
-        this.shortcuts.set(shortcut,{
-            action: action,
-        });
-        this.taskUI(()=>{
-                let the_row = undefined;
-                for(const row of this.ui.body.rows){
-                    if(row.dataset.shortcut === shortcut) {the_row = row; break;};
-                }
-                if(the_row === undefined){
-                    the_row = this.ui.body.insertRow();
-                    the_row.dataset.shortcut = shortcut;
-                    the_row.insertCell();
-                    the_row.insertCell();
-                }
-                the_row.cells.item(0).innerText = shortcut;
-                the_row.cells.item(1).innerText = action;
+    /**
+     * 
+     * @param {string} shortcut
+     * @param {string} action_name
+     * @param {*} up 
+     */
+    add_shortcut(shortcut,action_name,up=undefined){
+        let action = this.actions.get(action_name);
+        if(action){
+            this.shortcuts.set(shortcut,{
+                action: action.name,
+            });
+            this.taskUI(()=>{
+                    let the_row = undefined;
+                    for(const row of this.ui.body.rows){
+                        if(row.dataset.shortcut === shortcut) {the_row = row; break;};
+                    }
+                    if(the_row === undefined){
+                        the_row = this.ui.body.insertRow();
+                        the_row.dataset.shortcut = shortcut;
+                        the_row.insertCell();
+                        the_row.insertCell();
+                    }
+                    the_row.cells.item(0).innerText = shortcut;
+                    the_row.cells.item(1).innerText = action.short;
 
-            })
+                })
+        }
         this.store_shortcuts();
     }
 
@@ -293,9 +305,9 @@ window.hc.km.add_action({
 let core_actions = [
     {
         name: "ui_honk",
-        short: "Honk",
-        down: ()=>{honkStart()},
-        up: ()=>{honkEnd()},
+        short: "Honk/Flash",
+        down: ()=>{input_handler.honkStart()},
+        up: ()=>{input_handler.honkEnd()},
         norepeat: true
     },
     {
