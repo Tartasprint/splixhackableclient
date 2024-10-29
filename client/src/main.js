@@ -636,7 +636,7 @@ const Utf8ArrayToStr = (array) => {
 const toUTF8Array = str => {
 	const utf8 = [];
 	for (let i = 0; i < str.length; i++) {
-		const charcode = str.charCodeAt(i);
+		let charcode = str.charCodeAt(i);
 		if (charcode < 0x80) utf8.push(charcode);
 		else if (charcode < 0x800) {
 			utf8.push(0xc0 | (charcode >> 6), 0x80 | (charcode & 0x3f));
@@ -1538,8 +1538,11 @@ class SplixCanvas extends SplixBaseCamera {
 	/**@type {Vec2} */
 	camRotOffset = 0;
 	myNameAlphaTimer = 0;
-	constructor(canvas){
+	/**@type {SplixState} */
+	state;
+	constructor(canvas,state){
 		super(canvas);
+		this.state=state;
 	}
 
 	show(){
@@ -1588,10 +1591,10 @@ class SplixCanvas extends SplixBaseCamera {
 		}
 
 		//draw blocks
-		this.drawBlocks(deltaTime,game_state.blocks, true);
+		this.drawBlocks(deltaTime,this.state.blocks, true);
 
 		//players
-		for (const player of game_state.players.values()) {
+		for (const player of this.state.players.values()) {
 			this.drawPlayer(player, timeStamp, deltaTime);
 		}
 
@@ -1672,6 +1675,28 @@ class SplixCanvas extends SplixBaseCamera {
 				break;
 		}
 		this.camShakeForces.push([x, y, 0, !!doRotate]);
+	}
+
+	/** display the ping information */
+	display_ping(avg,last,diff){
+		avg = Math.round(avg);
+		last = Math.round(last);
+		diff = Math.round(diff);
+		const str = "avg:" + avg + " last:" + last + " diff:" + diff;
+		this.ctx.font = "14px Arial, Helvetica, sans-serif";
+		this.ctx.fillStyle = colors.red.brighter;
+		const textWidth = this.ctx.measureText(str).width;
+		this.ctx.fillText(str, this.canvas.width - textWidth - 10, this.canvas.height - 10);
+	}
+
+	move_camera(pos,deltaTime){
+		if (this.camPosSet) {
+			this.camPos[0] = lerpt(this.camPos[0], pos[0], 0.03, deltaTime);
+			this.camPos[1] = lerpt(this.camPos[1], pos[1], 0.03, deltaTime);
+		} else {
+			this.camPos = [pos[0], pos[1]];
+			this.camPosSet = true;
+		}
 	}
 }
 
@@ -2412,7 +2437,7 @@ class SkinButtonCanvas extends SplixBaseCamera {
 		}
 		this.shadow = shadow;
 		this.canvas.addEventListener('click', () => {
-			if (!game_connection && !isTransitioning && !playingAndReady) {
+			if (!one_game && !isTransitioning && !playingAndReady) {
 				transition_canvas.doTransition("", false, openSkinScreen);
 			}
 		});
@@ -2453,12 +2478,16 @@ class Minimap {
 	/** @type {CanvasRenderingContext2D} */
 	ctx;
 	/** @type {HTMLElement} */
-	player;
+	dot_elem;
+
+	/** @type {SplixState} */
+	state;
 	/** @type {number?} */
-	constructor(canvas,player){
+	constructor(state,canvas,dot_elem){
 		this.canvas = canvas;
 		this.ctx = this.canvas.getContext("2d");
-		this.player = player
+		this.dot_elem = dot_elem;
+		this.state = state;
 	}
 
 	update_map(data){
@@ -2480,8 +2509,8 @@ class Minimap {
 	}
 
 	update_player(pos){
-		this.player.style.left = (pos[0] / game_state.map_size * 160 + 1.5) + "px";
-		this.player.style.top = (pos[1] / game_state.map_size * 160 + 1.5) + "px";
+		this.dot_elem.style.left = (pos[0] / this.dot_elem.map_size * 160 + 1.5) + "px";
+		this.dot_elem.style.top = (pos[1] / this.dot_elem.map_size * 160 + 1.5) + "px";
 	}
 
 	reset(){
@@ -2676,7 +2705,7 @@ class TopNotification {
 		el.classList.add("topNotification", "greenBox");
 		el.style.visibility = "hidden";
 		document.getElementById("topNotifications").appendChild(el);
-		const c = getColorForBlockSkinId(game_state.my_player?.skinBlock ?? -1);
+		const c = getColorForBlockSkinId(game_state.my_player?.skinBlock ?? 9);
 		const mainColor = c.brighter;
 		const edgeColor = c.darker;
 		colorBox(el, mainColor, edgeColor);
@@ -2718,6 +2747,54 @@ class TopNotification {
 	destroy() {
 		this.elem.parentElement.removeChild(this.elem);
 		TopNotification.current_notifications.delete(this);
+	}
+}
+
+class LeftStats {
+
+	blocks_target = 25;
+	blocks = 25;
+	score_target = 25;
+	score = 25;
+	/**
+	 * Handles the bottom left stats.
+	 * @param {HTMLElement} blocks 
+	 * @param {HTMLElement} kills 
+	 * @param {HTMLElement} score 
+	 * @param {HTMLElement} rank 
+	 * @param {HTMLElement} total 
+	 */
+	constructor(blocks, kills, score, rank, total){
+		this.ui = {
+			blocks,
+			kills,
+			score,
+			rank,
+			total,
+		}
+		this.score_target;
+	};
+
+	reset(){
+		this.blocks = this.blocks_target = this.score = this.score_target = 25;
+	}
+
+	render(deltaTime){
+		this.score = lerpt(this.score, this.score_target, 0.1, deltaTime);
+		this.ui.score.innerText = Math.round(this.score);
+		this.blocks = lerpt(this.blocks, this.blocks_target, 0.1, deltaTime);
+		this.ui.blocks.innerText = Math.round(this.blocks);
+	}
+
+	rank_update(rank,total){
+		this.ui.rank.innerText = rank;
+		this.ui.total.innerText = total;
+	}
+
+	score_update(blocks,kills){
+		this.blocks_target = blocks;
+		this.score_target = blocks + kills * 500;
+		this.ui.kills.innerText = kills;
 	}
 }
 
@@ -2784,6 +2861,10 @@ class UglyUI {
 }
 
 class InputHanlder {
+
+	/** @type {OneGame} */
+	game;
+
 	//Honk
 	honkStartTime = undefined;
 	lastHonkTime = 0;
@@ -2825,7 +2906,8 @@ class InputHanlder {
 	};
 	gamepad_is_honking = false;
 	
-	constructor(touchcontrol_elem){
+	constructor(state,touchcontrol_elem){
+		this.state = state;
 		//Blur
 		window.addEventListener("blur", function (event) {
 			this.pressedKeys = [];
@@ -2865,7 +2947,7 @@ class InputHanlder {
 			for (const touch of e.touches) {
 				const currentTouch = this.current_touches.get(touch.identifier);
 				if (currentTouch) {
-					calcTouch(currentTouch, touch);
+					this.game.sendDir(calcTouch(currentTouch, touch));
 				}
 			}
 			e.preventDefault();
@@ -2874,7 +2956,7 @@ class InputHanlder {
 			for (const touch of e.touches) {
 				const  current_touch = this.current_touches.get(touch.identifier);
 				if(current_touch){
-					calcTouch(current_touch, touch);
+					this.game.sendDir(calcTouch(current_touch, touch));
 					this.current_touches.delete(current_touch.id);
 				}
 			}
@@ -2899,8 +2981,7 @@ class InputHanlder {
 			time = iLerp(0, 1000, time);
 			time *= 255;
 			time = Math.floor(time);
-			game_connection.wsSendMsg(sendAction.HONK, time);
-			game_state.my_player?.doHonk(Math.max(70, time));
+			this.game.honk(time);
 		}
 	}
 
@@ -2945,16 +3026,16 @@ class InputHanlder {
 					}
 					if (validGamepad) {
 						if (this.get_current_gamepad_button(12)) { //up
-							sendDir(3);
+							this.game.sendDir(3);
 						}
 						if (this.get_current_gamepad_button(13)) { //down
-							sendDir(1);
+							this.game.sendDir(1);
 						}
 						if (this.get_current_gamepad_button(14)) { //left
-							sendDir(2);
+							this.game.sendDir(2);
 						}
 						if (this.get_current_gamepad_button(15)) { //right
-							sendDir(0);
+							this.game.sendDir(0);
 						}
 						if (this.get_current_gamepad_button(0)) { // X / A
 							honkButtonPressedAnyPad = true;
@@ -2963,19 +3044,19 @@ class InputHanlder {
 							doSkipDeathTransition();
 						}
 						if (this.get_current_gamepad_button(9)) { // pause
-							sendDir(4);
+							this.game.sendDir(4);
 						}
 						if (this.get_current_gamepad_axis(0) < -0.9 || this.get_current_gamepad_axis(2) < -0.9) { //left
-							sendDir(2);
+							this.game.sendDir(2);
 						}
 						if (this.get_current_gamepad_axis(0) > 0.9 || this.get_current_gamepad_axis(2) > 0.9) { //right
-							sendDir(0);
+							this.game.sendDir(0);
 						}
 						if (this.get_current_gamepad_axis(1) < -0.9 || this.get_current_gamepad_axis(3) < -0.9) { //up
-							sendDir(3);
+							this.game.sendDir(3);
 						}
 						if (this.get_current_gamepad_axis(1) > 0.9 || this.get_current_gamepad_axis(3) > 0.9) { //down
-							sendDir(1);
+							this.game.sendDir(1);
 						}
 					}
 				}
@@ -3083,7 +3164,7 @@ class RenderingLoop {
 			}
 		}
 
-		this.deltaTime = realDeltaTime + this.totalDeltaTimeFromCap;
+		this.deltaTime = 16.66//realDeltaTime + this.totalDeltaTimeFromCap; TODO remove this comment
 		this.prevTimeStamp = timeStamp;
 		if (this.deltaTime < getDtCap(this.currentDtCap) && localStorage.dontCapFps != "true") {
 			this.totalDeltaTimeFromCap += realDeltaTime;
@@ -3091,17 +3172,15 @@ class RenderingLoop {
 			this.totalDeltaTimeFromCap = 0;
 			//main canvas
 			if(playingAndReady){
-				// update the player positions
-				game_state.update(this.deltaTime);
-				// change dir queue
-				game_connection.render();
+				one_game.update(this.deltaTime);
 				main_canvas.render(timeStamp,this.deltaTime);
+				//debug info (red ping stats)
+				if (localStorage.drawDebug == "true" && one_game) {
+						main_canvas.display_ping(...one_game.get_ping_info());
+				}
 			}
 			//corner stats
-			scoreStat = lerpt(scoreStat, scoreStatTarget, 0.1, this.deltaTime);
-			myScoreElem.innerHTML = Math.round(scoreStat);
-			realScoreStat = lerpt(realScoreStat, realScoreStatTarget, 0.1, this.deltaTime);
-			myRealScoreElem.innerHTML = Math.round(realScoreStat);
+			left_stats.render(this.deltaTime);
 
 			//transition canvas
 			if (isTransitioning) {
@@ -3114,7 +3193,7 @@ class RenderingLoop {
 			//top notification
 			TopNotification.update_all(this.deltaTime)
 
-			engagement.set_is_playing(playingAndReady && (Date.now() - (game_connection?.lastSendDirTime ?? 0)) < 20000);
+			engagement.set_is_playing(playingAndReady && (Date.now() - (one_game.connection?.lastSendDirTime ?? 0)) < 20000);
 
 			//title
 			if (beginScreenVisible && timeStamp - title_canvas.lastRender > 49) {
@@ -3211,19 +3290,7 @@ class RenderingLoop {
 				}
 			}
 
-			//debug info (red ping stats)
-			if (localStorage.drawDebug == "true") {
-				if(game_connection !== null){
-					const avg = Math.round(game_connection.serverAvgPing);
-					const last = Math.round(game_connection.serverLastPing);
-					const diff = Math.round(game_connection.serverDiffPing);
-					const str = "avg:" + avg + " last:" + last + " diff:" + diff + " fps:" + Math.round(debugging.getFPS());
-					main_canvas.ctx.font = "14px Arial, Helvetica, sans-serif";
-					main_canvas.ctx.fillStyle = colors.red.brighter;
-					const textWidth = main_canvas.ctx.measureText(str).width;
-					main_canvas.ctx.fillText(str, main_canvas.canvas.width - textWidth - 10, main_canvas.canvas.height - 10);
-				}
-			}
+
 
 			//ping overload test
 			// if(Date.now() - lastPingOverloadTestTime > 10000){
@@ -3256,16 +3323,6 @@ class RenderingLoop {
 			if (connectionLostNotification) {
 				connectionLostNotification.animateOut();
 				connectionLostNotification = null;
-			}
-		}
-
-		if(game_connection !== null){
-			const maxPingTime = game_connection.waitingForPing ? 10000 : 5000;
-			if (Date.now() - game_connection.lastPingTime > maxPingTime) {
-				game_connection.lastPingTime = Date.now();
-				if (game_connection.wsSendMsg(sendAction.PING)) {
-					game_connection.waitingForPing = true;
-				}
 			}
 		}
 
@@ -3430,14 +3487,16 @@ class SplixState {
 		} else {
 			const player = new Player(id);
 			this.players.set(id, player);
-			if(id === 0) this.my_player = player;
+			if(id === 0){
+				this.my_player = player;
+			}
 			return player;
 		}
 	}
 
 	update(deltaTime){
 		for (const player of this.players.values()) {
-			player.update(deltaTime);
+			player.update(deltaTime,this.map_size);
 		}
 	}
 }
@@ -3528,7 +3587,7 @@ class Player extends EventTarget {
 		this.drawPos[1] = lerpt(this.drawPos[1], target[1], 0.23, deltaTime);
 	}
 
-	update(deltaTime){
+	update(deltaTime,map_size){
 		let offset = deltaTime * GLOBAL_SPEED;
 		//move player
 		if (!this.isDead || !this.deathWasCertain) {
@@ -3571,8 +3630,8 @@ class Player extends EventTarget {
 		//test if player should be dead
 		let playerShouldBeDead = false;
 		if (
-			this.drawPos[0] <= 0 || this.drawPos[1] <= 0 || this.drawPos[0] >= game_state.map_size - 1 ||
-			this.drawPos[1] >= game_state.map_size - 1
+			this.drawPos[0] <= 0 || this.drawPos[1] <= 0 || this.drawPos[0] >= map_size - 1 ||
+			this.drawPos[1] >= map_size - 1
 		) {
 			playerShouldBeDead = true;
 		} else if (this.trails.length > 0) {
@@ -3625,36 +3684,29 @@ class Player extends EventTarget {
 		if (this.mydata) {
 			this.mydata.myPos = [this.pos[0], this.pos[1]];
 			minimap_canvas.update_player(this.mydata.myPos);
-			if (main_canvas.camPosSet) {
-				main_canvas.camPos[0] = lerpt(main_canvas.camPos[0], this.pos[0], 0.03, deltaTime);
-				main_canvas.camPos[1] = lerpt(main_canvas.camPos[1], this.pos[1], 0.03, deltaTime);
-			} else {
-				main_canvas.camPos = [this.pos[0], this.pos[1]];
-				main_canvas.camPosSet = true;
-			}
-
+			main_canvas.move_camera(this.pos,deltaTime);
 			if (this.mydata.nextDir != this.dir) {
 				// console.log("myNextDir != player.dir (",myNextDir,"!=",player.dir,")");
 				const horizontal = this.dir === 0 || this.dir == 2;
 				//only change when currently traveling horizontally and new dir is not horizontal
 				//or when new dir is horizontal but not currently traveling horizontally
-				if (changeDirAtIsHorizontal != horizontal) {
+				if (this.mydata.changeDirAtIsHorizontal != horizontal) {
 					let changeDirNow = false;
 					const currentCoord = this.pos[horizontal ? 0 : 1];
 					if (this.dir === 0 || this.dir == 1) { //right & down
-						if (changeDirAt < currentCoord) {
+						if (this.mydata.changeDirAt < currentCoord) {
 							changeDirNow = true;
 						}
 					} else {
-						if (changeDirAt > currentCoord) {
+						if (this.mydata.changeDirAt > currentCoord) {
 							changeDirNow = true;
 						}
 					}
 					if (changeDirNow) {
 						const newPos = [this.pos[0], this.pos[1]];
-						const tooFarTraveled = Math.abs(changeDirAt - currentCoord);
-						newPos[horizontal ? 0 : 1] = changeDirAt;
-						changeMyDir(this.mydata.nextDir, newPos);
+						const tooFarTraveled = Math.abs(this.mydata.changeDirAt - currentCoord);
+						newPos[horizontal ? 0 : 1] = this.mydata.changeDirAt;
+						this.mydata.changedir(this.mydata.nextDir, newPos);
 						movePos(this.pos, this.dir, tooFarTraveled);
 					}
 				}
@@ -3671,6 +3723,9 @@ class MyPlayerData {
 		this.rank = 0;
 		this.serverPos= [0, 0];
 		this.serverDir = null;
+		this.changedir = undefined;
+		this.changeDirAt = null;
+		this.changeDirAtIsHorizontal = false;
 	}
 
 	reset(){
@@ -3679,6 +3734,531 @@ class MyPlayerData {
 	}
 }
 
+const request = window.indexedDB.open("test");
+/**
+ * @type {IDBDatabase}
+ */
+let db;
+request.onerror = (event) => {
+	console.error("Why didn't you allow my web app to use IndexedDB?!");
+  };
+request.onsuccess = (event) => {
+db = event.target.result;
+db.onerror = (event) => {
+	// Generic error handler for all errors targeted at this database's
+	// requests!
+	console.error(`Database error: ${event.target.error?.message}`);
+};
+};
+
+request.onupgradeneeded = (event) => {
+	// Save the IDBDatabase interface
+	const db = event.target.result;
+  
+	// Create an objectStore for this database
+	const data_store = db.createObjectStore("recording_data", { autoIncrement: true });
+	data_store.createIndex("time","time");
+	data_store.createIndex("recording","recording");
+	data_store.transaction.oncomplete = () => {
+		console.log("Succesfully created !");
+	}
+
+	const listing_store = db.createObjectStore("recording_listing", { autoIncrement: true });
+	listing_store.createIndex("time","time");
+	listing_store.transaction.oncomplete = () => {
+		console.log("Succesfully created !");
+	}
+
+};
+
+class OneGame extends EventTarget {
+	/**
+	 * @type {SplixState}
+	 */
+	#state;
+	/**
+	 * @type {GameConnection}
+	 */
+	connection;
+	constructor(url,state,fake){
+		super();
+		this.#state = state;
+		this.fake = fake;
+		if(!fake){
+			let listing_store = db.transaction(["recording_listing"],"readwrite").objectStore('recording_listing');
+			listing_store.add({time: Date.now()}).onsuccess = ev => {
+				this.connection = new GameConnection(url,this);
+				this.listing = ev.target.result;
+			};
+			const that = this;
+			this.updater = new Proxy({},{
+				get(_t,p,_r){
+					return (function u(...args){
+						db.transaction(["recording_data"], "readwrite").objectStore("recording_data").add({
+							time: Date.now(),
+							recording: that.listing,
+							call: p,
+							args: args,
+						});
+						(that["update_"+p].bind(that))(...args);
+					});
+				}
+			})
+		} else {
+			const that = this;
+
+			this.connection = new RegisteredConnection(url,this);
+			this.updater = new Proxy({},{
+				get(_t,p,_r){
+					return (function u(...args){
+						(that["update_"+p].bind(that))(...args);
+					});
+				}
+			})
+		}
+	}
+
+	sendDir(dir){
+		this.connection.sendDir(dir);
+	}
+
+	honk(time){
+		this.connection.wsSendMsg(sendAction.HONK, time);
+		this.#state.my_player?.doHonk(Math.max(70, time));
+	}
+
+	update(deltaTime){
+		// update the player positions
+		this.#state.update(deltaTime);
+		// change dir queue
+		this.connection.render();
+	}
+
+	/**
+	 * 
+	 * @param {Player} player 
+	 * @param {Vec2} pos 
+	 */
+	trailPush(player, pos) {
+		if (player.trails.length > 0) {
+			const lastTrail = player.trails[player.trails.length - 1].trail;
+			if (lastTrail.length > 0) {
+				const lastPos = lastTrail[lastTrail.length - 1];
+				if (lastPos[0] != player.pos[0] || lastPos[1] != player.pos[1]) {
+					if (pos === undefined) {
+						pos = [player.pos[0], player.pos[1]];
+					} else {
+						pos = [pos[0], pos[1]];
+					}
+					lastTrail.push(pos);
+					if (player.mydata && this.connection.isRequestingMyTrail) {
+						this.connection.trailPushesDuringRequest.push(pos);
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * Changes my player's direction.
+	 * @param {number} dir 
+	 * @param {Vec2} newPos 
+	 * @param {boolean} extendTrail 
+	 * @param {boolean} isClientside 
+	 */
+	changeMyDir(dir, newPos, extendTrail, isClientside) {
+		this.#state.my_player.dir = this.#state.my_player.mydata.nextDir = dir;
+		this.#state.my_player.pos = [newPos[0], newPos[1]];
+		this.connection.lastChangedDirPos = [newPos[0], newPos[1]];
+	
+		if (extendTrail === undefined) {
+			extendTrail = true;
+		}
+		if (isClientside === undefined) {
+			isClientside = true;
+		}
+	
+		if (extendTrail) {
+			one_game.trailPush(this.#state.my_player);
+		}
+	
+		if (isClientside) {
+			this.connection.lastClientsideMoves.push({
+				dir: dir,
+				pos: newPos,
+			});
+		}
+	}
+
+	update_change_dir({next_dir, at, is_horizontal}){
+		this.#state.my_player.mydata.nextDir = next_dir;
+		this.#state.my_player.mydata.changeDirAt = at;
+		this.#state.my_player.mydata.changeDirAtIsHorizontal = is_horizontal;
+	}
+
+	update_change_my_dir(dir,newPos){
+		this.changeMyDir(dir, newPos);
+	}
+
+	
+	/**
+	 * A copy of the data needed for sendDir.
+	 */
+	get_send_dir_data(){
+		return this.#state.my_player && this.#state.my_player.mydata.myPos ? {
+			my_pos: this.#state.my_player.mydata.myPos.map(x=>x),
+			my_dir: this.#state.my_player.dir
+		} : undefined;
+	}
+
+	/**
+	 * Get ping information.
+	 */
+	get_ping_info(){
+		return [this.connection.serverAvgPing,this.connection.serverLastPing,this.connection.serverDiffPing];
+	}
+
+	getPlayer(id){
+		const player = this.#state.getPlayer(id);
+		if(id === 0){
+			player.mydata.changedir ??= this.changeMyDir.bind(this);
+		}
+		return player;
+	}
+
+	getBlock(x,y){
+		return this.#state.getBlock(x,y);
+	}
+
+	update_block(x,y,type){
+		const block = this.getBlock(x, y);
+		block.setBlockId(type);
+	}
+
+	update_player_pos(id,x,y,newDir,extendTrail,reqdoSetPos,serverAvgPing){
+		const player = this.getPlayer(id);
+		player.hasReceivedPosition = true;
+		player.moveRelativeToServerPosNextFrame = true;
+		player.lastServerPosSentTime = Date.now();
+		lastMyPosHasBeenConfirmed = true;
+		const newPos = [x, y];
+		let newPosOffset = [x, y];
+
+		//add distance traveled during server delay (ping/2)
+		let posOffset = 0;
+		if (player.mydata || serverAvgPing > 50) {
+			posOffset = serverAvgPing / 2 * GLOBAL_SPEED;
+		}
+		movePos(newPosOffset, newDir, posOffset);
+
+		let doSetPos = true;
+		if (player.mydata) {
+			lastMyPosServerSideTime = Date.now();
+			// console.log("current dir:",player.dir, "myNextDir", myNextDir, "newDir", newDir);
+			// console.log("newPosOffset",newPosOffset, "player.pos", player.pos);
+
+			//if dir and pos are close enough to the current dir and pos
+			if (
+				(player.dir == newDir || player.mydata.nextDir == newDir) &&
+				Math.abs(newPosOffset[0] - player.pos[0]) < 1 &&
+				Math.abs(newPosOffset[1] - player.pos[1]) < 1
+			) {
+				// console.log("newPosOffset",newPosOffset);
+				// console.log("doSetPos is false because dir and pos are close enough to current dir and pos");
+				doSetPos = false;
+			}
+
+			doSetPos = doSetPos && reqdoSetPos;
+
+			if (player.dir == 4 || newDir == 4) { //is paused or is about to be paused
+				// console.log("player.dir == 4 or newDir == 4, doSetPos = true");
+				doSetPos = true;
+			}
+
+			// console.log("doSetPos:",doSetPos);
+			if (doSetPos) {
+				// console.log("==================doSetPos is true================");
+				player.mydata.nextDir = newDir;
+				this.changeMyDir(newDir, newPos, false, false);
+				//doSetPos is true, so the server thinks the player is somewhere
+				//else than the client thinks he is. To prevent the trail from
+				//getting messed up, request the full trail
+				this.connection.startRequestMyTrail();
+				this.connection.sendDirQueue = [];
+			}
+
+			//always set the server position
+			player.mydata.serverPos = [newPosOffset[0], newPosOffset[1]];
+			player.mydata.serverDir = newDir;
+
+			this.#state.removeBlocksOutsideViewport(player.pos); // TODO Fog mode
+		} else {
+			player.dir = newDir;
+		}
+
+		if (doSetPos) {
+			player.pos = newPosOffset;
+			// console.log("doSetPos",newPosOffset);
+			if (extendTrail) {
+				this.trailPush(player, newPos);
+			} else {
+				player.trails.push({
+					trail: [],
+					vanishTimer: 0,
+				});
+			}
+		}
+
+		if (!player.drawPosSet) {
+			player.drawPos = [player.pos[0], player.pos[1]];
+			player.drawPosSet = true;
+		}
+	}
+
+	update_player_trail(id,new_trail,replace){
+		const player = this.getPlayer(id);
+		if (replace) {
+			if (player.trails.length > 0) {
+				const last = player.trails[player.trails.length - 1];
+				last.trail = new_trail;
+				last.vanishTimer = 0;
+			} else {
+				replace = false;
+			}
+		}
+		if (!replace) {
+			player.trails.push({
+				trail: new_trail,
+				vanishTimer: 0,
+			});
+		}
+	}
+
+	update_player_empty_trail_with_last_pos(id,x,y){
+		const player = this.getPlayer(id);
+		if (player.trails.length > 0) {
+			const prevTrail = player.trails[player.trails.length - 1].trail;
+			if (prevTrail.length > 0) {
+				prevTrail.push([x, y]);
+			}
+		}
+		player.trails.push({
+			trail: [],
+			vanishTimer: 0,
+		});
+	}
+
+	update_player_die(id,x,y){
+		const player = this.getPlayer(id);
+		if(x !== undefined){
+			player.pos[0] = x;
+			player.pos[1] = y;
+		}
+		player.die(true);
+	}
+
+	update_player_remove(id){
+		this.#state.players.delete(id);
+	}
+
+	update_player_name(id,name){
+		const player = this.getPlayer(id);
+		player.name = filter(name);
+	}
+
+	update_player_skin(id,skin){
+		const player = this.getPlayer(id);
+		player.skinBlock = skin;
+		if (player.mydata) {
+			colorUI();
+		}
+	}
+
+	update_player_hit_line(id,pointsColor,x,y,hitSelf){
+			const player = this.getPlayer(id);
+			player.addHitLine([x, y], pointsColor, hitSelf);
+			if (player.mydata && !hitSelf) {
+				main_canvas.doCamShakeDir(player.dir, 10, false);
+			}
+	}
+
+	update_player_honk(id,time){
+		const player = this.getPlayer(id);
+		player.doHonk(time);
+	}
+
+	update_player_undo_die(id){
+		const player = this.getPlayer(id);
+		player.undoDie();
+	}
+
+	update_you_ded(data){
+		if (data.length > 1) {
+			lastStat.blocks = bytesToInt(data[1], data[2], data[3], data[4]);
+			if (lastStat.blocks > bestStat.blocks) {
+				bestStat.blocks = lastStat.blocks;
+				lsSet("bestStatBlocks", bestStat.blocks);
+			}
+			lastStat.kills = bytesToInt(data[5], data[6]);
+			if (lastStat.kills > bestStat.kills) {
+				bestStat.kills = lastStat.kills;
+				lsSet("bestStatKills", bestStat.kills);
+			}
+			lastStat.leaderboard_rank = bytesToInt(data[7], data[8]);
+			if ((lastStat.leaderboard_rank < bestStat.leaderboard_rank || bestStat.leaderboard_rank <= 0) && lastStat.leaderboard_rank > 0) {
+				bestStat.leaderboard_rank = lastStat.leaderboard_rank;
+				lsSet("bestStatLbRank", bestStat.leaderboard_rank);
+			}
+			lastStat.alive = bytesToInt(data[9], data[10], data[11], data[12]);
+			if (lastStat.alive > bestStat.alive) {
+				bestStat.alive = lastStat.alive;
+				lsSet("bestStatAlive", bestStat.alive);
+			}
+			lastStat.no1_time = bytesToInt(data[13], data[14], data[15], data[16]);
+			if (lastStat.no1_time > bestStat.no1_time) {
+				bestStat.no1_time = lastStat.no1_time;
+				lsSet("bestStatNo1Time", bestStat.no1_time);
+			}
+			lastStatDeathType = data[17];
+			lastStatKiller = "";
+			document.getElementById("lastStats").style.display = null;
+			document.getElementById("bestStats").style.display = null;
+			lastStatCounter = 0;
+			lastStatTimer = 0;
+			lastStatValueElem.innerHTML = bestStatValueElem.innerHTML = "";
+			switch (lastStatDeathType) {
+				case 1:
+					if (data.length > 18) {
+						const nameBytes = data.subarray(18, data.length);
+						lastStatKiller = Utf8ArrayToStr(nameBytes);
+					}
+					break;
+				case 2:
+					lastStatKiller = "the wall";
+					break;
+				case 3:
+					lastStatKiller = "yourself";
+					break;
+			}
+		}
+		allowSkipDeathTransition = true;
+		deathTransitionTimeout = window.setTimeout(() => {
+			// resetAll();
+			if (skipDeathTransition) {
+				transition_canvas.doTransition("", false, () => {
+					onClose();
+					resetAll();
+					connectWithTransition(true);
+				});
+			} else {
+				// console.log("before doTransition",isTransitioning);
+				transition_canvas.doTransition("GAME OVER", true, null, () => {
+					this.connection.onClose();
+					resetAll();
+				}, true);
+				// console.log("after doTransition",isTransitioning);
+			}
+			deathTransitionTimeout = null;
+		}, 1000);
+	}
+
+	update_my_rank(rank){
+		if(rank !== undefined) this.#state.my_player.mydata.rank = rank;
+		this.update_stats(true);
+	}
+
+	update_stats(ranksent){
+		if (this.#state.my_player.mydata.rank > this.#state.total_players && ranksent) {
+			this.#state.total_players = this.#state.my_player.mydata.rank;
+		} else if ((this.#state.total_players < this.#state.my_player.mydata.rank) || (this.#state.my_player.mydata.rank === 0 && this.#state.total_players > 0)) {
+			this.#state.my_player.mydata.rank = this.#state.total_players;
+		}
+		this.dispatchEvent(new CustomEvent('update_my_rank', {detail: {
+			rank: this.#state.my_player.mydata.rank,
+			totlal_players: this.#state.total_players,
+		}}));
+	}
+
+	update_leaderboard(total_players,data){
+		data=Uint8Array.from(data);
+		leaderboardElem.innerHTML = "";
+		this.#state.total_players = total_players;
+		this.update_stats(false);
+		let i = 0;
+		let rank = 1;
+		while (true) {
+			if (i >= data.length) {
+				break;
+			}
+			const thisPlayerScore = bytesToInt(data[i], data[i + 1], data[i + 2], data[i + 3]);
+			const nameLen = data[i + 4];
+			const nameBytes = data.subarray(i + 5, i + 5 + nameLen);
+			const thisPlayerName = Utf8ArrayToStr(nameBytes);
+
+			//create table row
+			const tr = document.createElement("tr");
+			tr.className = "scoreRank";
+			const rankElem = document.createElement("td");
+			rankElem.innerHTML = "#" + rank;
+			tr.appendChild(rankElem);
+			const nameElem = document.createElement("td");
+			nameElem.innerHTML = filter(htmlEscape(thisPlayerName));
+			tr.appendChild(nameElem);
+			const scoreElem = document.createElement("td");
+			scoreElem.innerHTML = thisPlayerScore;
+			tr.appendChild(scoreElem);
+			leaderboardElem.appendChild(tr);
+
+			i = i + 5 + nameLen;
+			rank++;
+		}
+		if (this.#state.total_players < 30 && doRefreshAfterDie && closeNotification === null) {
+			closeNotification = new TopNotification("This server is about to close, refresh to join a full server.");
+		}
+	}
+
+	update_my_score(blocks,kills){
+		this.dispatchEvent(new CustomEvent('update_my_score',{detail: {
+			blocks,
+			kills,
+		}}));
+	}
+
+	update_chunk_of_blocks(x,y,w,h,data){
+		let i = 0;
+		for (let j = x; j < x + w; j++) {
+			for (let k = y; k < y + h; k++) {
+				const block = this.getBlock(j, k);
+				block.setBlockId(data[i], false);
+				i++;
+			}
+		}
+	}
+
+	update_fill_area(x, y, w, h, type, pattern, isEdgeChunk){
+		this.#state.fillArea(x, y, w, h, type, pattern, isEdgeChunk);
+	}
+
+	update_minimap(data){
+		minimap_canvas.update_map(data);
+	}
+
+	update_map_size(size){
+		this.#state.map_size = size;
+	}
+
+	update_life_count(currentLives,totalLives){
+		life_box.setLives(currentLives, totalLives);
+	}
+
+	update_ready(){
+		playingAndReady = true;
+		if (!isTransitioning) {
+			isTransitioning = true;
+			onConnectOrMiddleOfTransition();
+		}
+	}
+}
 
 // Some dated code is using these in places like `for(i = 0`.
 // While ideally these variables should all be made local,
@@ -3690,6 +4270,7 @@ class MyPlayerData {
 // Nothing to worry about !
 // Tartasprint
 
+//#region Declarations
 const IS_SECURE = location.protocol.indexOf("https") >= 0;
 const SECURE_WS = IS_SECURE ? "wss://" : "ws://";
 /** @type {SplixCanvas} main ctx */
@@ -3710,6 +4291,8 @@ let skin_screen;
 let title_canvas;
 /** @type {LifeBox} */
 let life_box;
+/** @type {LeftStats} */
+let left_stats;
 /** @type {InputHanlder} */
 let input_handler;
 /** @type {RenderingLoop} */
@@ -3718,17 +4301,10 @@ let rendering_loop;
 let quality_ui;
 /** @type {UglyUI} */
 let ugly_ui;
-var changeDirAt = null,
-	changeDirAtIsHorizontal = false,
-	lastChangedDirPos = null;
-var lastClientsideMoves = [];
+
+let logger = null;
 var beginScreenVisible = true;
 var canvasQuality = 1, zoom, uglyMode = false;
-var myScoreElem,
-	myKillsElem,
-	myRealScoreElem,
-	myRankElem,
-	totalPlayersElem;
 var leaderboardElem, leaderboardDivElem, leaderboardHidden = localStorage.leaderboardHidden == "true";
 var playUI,
 	beginScreen,
@@ -3767,8 +4343,10 @@ let debugging = {
 //called by form, connects with transition and error handling
 var isConnectingWithTransition = false;
 
-/**@type {GameConnection?} */
-let game_connection = null;
+/**@type {OneGame?} */
+let one_game = null;
+//#endregion Declarations
+
 
 function countPlayGame() {
 	let old = 0;
@@ -4025,70 +4603,16 @@ function nameInputOnChange() {
 	lsSet("name", nameInput.value);
 }
 
-//sends new direction to websocket
-//used to prevent spamming buttons
-function sendDir(dir, skipQueue) {
-	// console.log("======sendDir",dir, skipQueue);
-	if (!game_connection) {
-		return false;
-	}
-	return game_connection.sendDir(dir,skipQueue);
-}
-
-
-function changeMyDir(dir, newPos, extendTrail, isClientside) {
-	// console.log("changeMyDir");
-	game_state.my_player.dir = game_state.my_player.mydata.nextDir = dir;
-	game_state.my_player.pos = [newPos[0], newPos[1]];
-	lastChangedDirPos = [newPos[0], newPos[1]];
-
-	if (extendTrail === undefined) {
-		extendTrail = true;
-	}
-	if (isClientside === undefined) {
-		isClientside = true;
-	}
-
-	if (extendTrail) {
-		trailPush(game_state.my_player);
-	}
-
-	if (isClientside) {
-		lastClientsideMoves.push({
-			dir: dir,
-			pos: newPos,
-		});
-	}
-}
-
-function trailPush(player, pos) {
-	if (player.trails.length > 0) {
-		const lastTrail = player.trails[player.trails.length - 1].trail;
-		if (lastTrail.length > 0) {
-			const lastPos = lastTrail[lastTrail.length - 1];
-			if (lastPos[0] != player.pos[0] || lastPos[1] != player.pos[1]) {
-				if (pos === undefined) {
-					pos = [player.pos[0], player.pos[1]];
-				} else {
-					pos = [pos[0], pos[1]];
-				}
-				lastTrail.push(pos);
-				if (player.mydata && game_connection.isRequestingMyTrail) {
-					game_connection.trailPushesDuringRequest.push(pos);
-				}
-			}
-		}
-	}
-}
-
 //when page is finished loading
 window.addEventListener('load', function () {
 	rendering_loop = new RenderingLoop();
 	input_handler  = new InputHanlder(
+		game_state,
 		document.getElementById("touchControls")
 	);
-	main_canvas = new SplixCanvas(document.getElementById("mainCanvas"));
+	main_canvas = new SplixCanvas(document.getElementById("mainCanvas"), game_state);
 	minimap_canvas = new Minimap(
+		game_state,
 		document.getElementById("minimapCanvas"),
 		document.getElementById("miniMapPlayer"),
 	);
@@ -4109,7 +4633,13 @@ window.addEventListener('load', function () {
 	life_box = new LifeBox();
 	quality_ui = new QualityUI(document.getElementById("qualityText"));
 	ugly_ui = new UglyUI(document.getElementById("uglyText"));
-	
+	left_stats = new LeftStats(
+		document.getElementById("blockCaptureCount"),
+		document.getElementById("score"),
+		document.getElementById("myKills"),
+		document.getElementById("myRank"),
+		document.getElementById("totalPlayers"),
+	);
 	
 	
 	notificationElem = document.getElementById("notification");
@@ -4117,11 +4647,6 @@ window.addEventListener('load', function () {
 	bestStatValueElem = document.getElementById("bestStatsRight");
 	joinButton = document.getElementById("joinButton");
 
-	myScoreElem = document.getElementById("blockCaptureCount");
-	myRealScoreElem = document.getElementById("score");
-	myKillsElem = document.getElementById("myKills");
-	myRankElem = document.getElementById("myRank");
-	totalPlayersElem = document.getElementById("totalPlayers");
 	leaderboardElem = document.createElement("tbody");
 	const table = document.createElement("table");
 	table.appendChild(leaderboardElem);
@@ -4281,6 +4806,9 @@ function connectWithTransition(dontDoAds) {
 class GameConnection {
 	ws;
 	url;
+
+	/** @type {OneGame} Associated state */
+	game;
 	
 	// Status
 	isConnecting = true;
@@ -4304,11 +4832,14 @@ class GameConnection {
 	lastSendDir = -1;
 	lastSendDirTime = 0;
 	sendDirQueue = [];
+	lastChangedDirPos = null;
+	lastClientsideMoves = [];
 
 	/** @type {number}  time stamp of the opening of the websocket connection */
 	onOpenTime;
-	constructor(url){
+	constructor(url,game){
 		this.url = url;
+		this.game = game;
 		showCouldntConnectAfterTransition = false; // TODO
 		this.ws = new WebSocket(url);
 		this.ws.binaryType = "arraybuffer";
@@ -4368,8 +4899,8 @@ class GameConnection {
 		} else {
 			//disconnect because of death 
 		}
-		game_connection.ws = null;
-		game_connection.isConnecting = false;
+		this.ws = null;
+		this.isConnecting = false;
 	}
 
 	//sends a legacy message which is required for older servers
@@ -4418,14 +4949,10 @@ class GameConnection {
 	}
 	
 	sendDir(dir, skipQueue) {
-		// console.log("======sendDir",dir, skipQueue);
-		if (!game_state.my_player.mydata.myPos) {
-			return false;
-		}
-		//game_state.my_player doesn't exist
-		if (!game_state.my_player) {
-			return false;
-		}
+		let data = this.game.get_send_dir_data();
+		// my_player doesn't exist
+		if(data === undefined) return false;
+		const {my_dir,my_pos} = data;
 	
 		//prevent spamming sendDir function
 		if (
@@ -4438,7 +4965,7 @@ class GameConnection {
 		this.lastSendDirTime = Date.now();
 	
 		//dir is already the current direction, don't do anything
-		if (game_state.my_player.dir == dir) {
+		if (my_dir == dir) {
 			// console.log("already current direction, don't do anything");
 			this.addSendDirQueue(dir, skipQueue);
 			return false;
@@ -4446,10 +4973,10 @@ class GameConnection {
 	
 		//if dir is the opposite direction
 		if (
-			(dir === 0 && game_state.my_player.dir == 2) ||
-			(dir == 2 && game_state.my_player.dir === 0) ||
-			(dir == 1 && game_state.my_player.dir == 3) ||
-			(dir == 3 && game_state.my_player.dir == 1)
+			(dir === 0 && my_dir == 2) ||
+			(dir == 2 && my_dir === 0) ||
+			(dir == 1 && my_dir == 3) ||
+			(dir == 3 && my_dir == 1)
 		) {
 			// console.log("already opposite direction, don't send");
 			this.addSendDirQueue(dir, skipQueue);
@@ -4461,9 +4988,9 @@ class GameConnection {
 		document.body.style.cursor = "none";
 	
 		//wether next direction is horizontal movement or not
-		const horizontal = game_state.my_player.dir == 1 || game_state.my_player.dir == 3;
-		const coord = game_state.my_player.mydata.myPos[horizontal ? 1 : 0];
-		const newPos = [game_state.my_player.mydata.myPos[0], game_state.my_player.mydata.myPos[1]];
+		const horizontal = my_dir == 1 || my_dir == 3;
+		const coord = my_pos[horizontal ? 1 : 0];
+		const newPos = [my_pos[0], my_pos[1]];
 		const roundCoord = Math.round(coord);
 		newPos[horizontal ? 1 : 0] = roundCoord;
 	
@@ -4472,10 +4999,10 @@ class GameConnection {
 		//test if the coordinate being sent wasn't already sent earlier
 		// console.log(lastChangedDirPos);
 		if (
-			(game_state.my_player.dir === 0 && newPos[0] <= lastChangedDirPos[0]) ||
-			(game_state.my_player.dir == 1 && newPos[1] <= lastChangedDirPos[1]) ||
-			(game_state.my_player.dir == 2 && newPos[0] >= lastChangedDirPos[0]) ||
-			(game_state.my_player.dir == 3 && newPos[1] >= lastChangedDirPos[1])
+			(my_dir === 0 && newPos[0] <= this.lastChangedDirPos[0]) ||
+			(my_dir == 1 && newPos[1] <= this.lastChangedDirPos[1]) ||
+			(my_dir == 2 && newPos[0] >= this.lastChangedDirPos[0]) ||
+			(my_dir == 3 && newPos[1] >= this.lastChangedDirPos[1])
 		) {
 			// console.log("same coordinate, don't send");
 			this.addSendDirQueue(dir, skipQueue);
@@ -4484,11 +5011,11 @@ class GameConnection {
 	
 		let changeDirNow = false;
 		const blockPos = coord - Math.floor(coord);
-		if (game_state.my_player.dir <= 1) { //right or down
+		if (my_dir <= 1) { //right or down
 			if (blockPos < 0.45) {
 				changeDirNow = true;
 			}
-		} else if (game_state.my_player.dir <= 3) { //left or up
+		} else if (my_dir <= 3) { //left or up
 			if (blockPos > 0.55) {
 				changeDirNow = true;
 			}
@@ -4499,12 +5026,14 @@ class GameConnection {
 		// console.log("changeDirNow",changeDirNow);
 	
 		if (changeDirNow) {
-			changeMyDir(dir, newPos);
+			this.game.updater.change_my_dir(dir, newPos);
 		} else {
-			game_state.my_player.mydata.nextDir = dir;
-			changeDirAt = roundCoord;
-			changeDirAtIsHorizontal = horizontal;
-			lastChangedDirPos = [newPos[0], newPos[1]];
+			this.game.updater.change_dir({
+				next_dir: dir,
+				at: roundCoord,
+				is_horizontal: horizontal,
+			})
+			this.lastChangedDirPos = [newPos[0], newPos[1]];
 		}
 		lastMyPosSetClientSideTime = Date.now();
 		if (lastMyPosHasBeenConfirmed) {
@@ -4512,7 +5041,7 @@ class GameConnection {
 		}
 		lastMyPosHasBeenConfirmed = false;
 		// console.log("send ======= UPDATE_DIR ======",dir,newPos);
-		game_connection.wsSendMsg(sendAction.UPDATE_DIR, {
+		this.wsSendMsg(sendAction.UPDATE_DIR, {
 			dir: dir,
 			coord: newPos,
 		});
@@ -4527,6 +5056,13 @@ class GameConnection {
 				this.sendDir(thisDir.dir, true) // senddir call was successful
 			) {
 				this.sendDirQueue.shift(); //remove item
+			}
+		}
+		const maxPingTime = this.waitingForPing ? 10000 : 5000;
+		if (Date.now() - this.lastPingTime > maxPingTime) {
+			this.lastPingTime = Date.now();
+			if (this.wsSendMsg(sendAction.PING)) {
+				this.waitingForPing = true;
 			}
 		}
 	}
@@ -4614,46 +5150,15 @@ class GameConnection {
 			const x = bytesToInt(data[1], data[2]);
 			const y = bytesToInt(data[3], data[4]);
 			const type = data[5];
-			const block = game_state.getBlock(x, y);
-			block.setBlockId(type);
+			this.game.updater.block(x,y,type);
 		}
 		if (data[0] == receiveAction.PLAYER_POS) {
 			const x = bytesToInt(data[1], data[2]);
 			const y = bytesToInt(data[3], data[4]);
 			const id = bytesToInt(data[5], data[6]);
-			const player = game_state.getPlayer(id);
-			player.hasReceivedPosition = true;
-			player.moveRelativeToServerPosNextFrame = true;
-			player.lastServerPosSentTime = Date.now();
-			lastMyPosHasBeenConfirmed = true;
-			let newDir = data[7];
-			let newPos = [x, y];
-			let newPosOffset = [x, y];
-
-			//add distance traveled during server delay (ping/2)
-			let posOffset = 0;
-			if (player.mydata || this.serverAvgPing > 50) {
-				posOffset = this.serverAvgPing / 2 * GLOBAL_SPEED;
-			}
-			movePos(newPosOffset, newDir, posOffset);
-
+			const new_dir = data[7];
 			let doSetPos = true;
-			if (player.mydata) {
-				lastMyPosServerSideTime = Date.now();
-				// console.log("current dir:",player.dir, "myNextDir", myNextDir, "newDir", newDir);
-				// console.log("newPosOffset",newPosOffset, "player.pos", player.pos);
-
-				//if dir and pos are close enough to the current dir and pos
-				if (
-					(player.dir == newDir || player.mydata.nextDir == newDir) &&
-					Math.abs(newPosOffset[0] - player.pos[0]) < 1 &&
-					Math.abs(newPosOffset[1] - player.pos[1]) < 1
-				) {
-					// console.log("newPosOffset",newPosOffset);
-					// console.log("doSetPos is false because dir and pos are close enough to current dir and pos");
-					doSetPos = false;
-				}
-
+			if(id === 0){
 				//if dir and pos are the first item of lastClientsideMoves
 				//when two movements are made shortly after each other the
 				//previous check (dir && pos) won't suffice, eg:
@@ -4662,70 +5167,25 @@ class GameConnection {
 				// receives move #1 <-- different from current dir & pos
 				// recieves move #2
 				// console.log(lastClientsideMoves);
-				if (lastClientsideMoves.length > 0) {
-					const lastClientsideMove = lastClientsideMoves.shift();
+				if (this.lastClientsideMoves.length > 0) {
+					const lastClientsideMove = this.lastClientsideMoves.shift();
 					if (
-						lastClientsideMove.dir == newDir &&
-						lastClientsideMove.pos[0] == newPos[0] &&
-						lastClientsideMove.pos[1] == newPos[1]
+						lastClientsideMove.dir == new_dir &&
+						lastClientsideMove.pos[0] == x &&
+						lastClientsideMove.pos[1] == y
 					) {
 						doSetPos = false;
 						// console.log("new dir is same as last isClientside move");
 						// console.log("doSetPos = false;");
 					} else {
-						lastClientsideMoves = [];
+						this.lastClientsideMoves = [];
 						// console.log("empty lastClientsideMoves");
 					}
 				}
-
-				if (player.dir == 4 || newDir == 4) { //is paused or is about to be paused
-					// console.log("player.dir == 4 or newDir == 4, doSetPos = true");
-					doSetPos = true;
-				}
-
-				// console.log("doSetPos:",doSetPos);
-				if (doSetPos) {
-					// console.log("==================doSetPos is true================");
-					player.mydata.nextDir = newDir;
-					changeMyDir(newDir, newPos, false, false);
-					//doSetPos is true, so the server thinks the player is somewhere
-					//else than the client thinks he is. To prevent the trail from
-					//getting messed up, request the full trail
-					this.startRequestMyTrail();
-					this.sendDirQueue = [];
-				}
-
-				//always set the server position
-				player.mydata.serverPos = [newPosOffset[0], newPosOffset[1]];
-				player.mydata.serverDir = newDir;
-
-				game_state.removeBlocksOutsideViewport(player.pos); // TODO Fog mode
-			} else {
-				player.dir = newDir;
 			}
-
-			if (doSetPos) {
-				player.pos = newPosOffset;
-				// console.log("doSetPos",newPosOffset);
-
-				const extendTrailFlagSet = data.length > 8;
-				if (extendTrailFlagSet) {
-					const extendTrail = data[8] == 1;
-					if (extendTrail) {
-						trailPush(player, newPos);
-					} else {
-						player.trails.push({
-							trail: [],
-							vanishTimer: 0,
-						});
-					}
-				}
-			}
-
-			if (!player.drawPosSet) {
-				player.drawPos = [player.pos[0], player.pos[1]];
-				player.drawPosSet = true;
-			}
+			const extendTrail = data.length > 8 && data[8] == 1;
+			this.game.updater.player_pos(id, x, y,new_dir,extendTrail,doSetPos, this.serverAvgPing);
+			
 		}
 		if (data[0] == receiveAction.FILL_AREA) {
 			const x = bytesToInt(data[1], data[2]);
@@ -4735,11 +5195,11 @@ class GameConnection {
 			const type = data[9];
 			const pattern = data[10];
 			const isEdgeChunk = data[11];
-			game_state.fillArea(x, y, w, h, type, pattern, isEdgeChunk);
+			this.game.updater.fill_area(x, y, w, h, type, pattern, isEdgeChunk);
 		}
 		if (data[0] == receiveAction.SET_TRAIL) {
 			const id = bytesToInt(data[1], data[2]);
-			const player = game_state.getPlayer(id);
+			const player = this.game.getPlayer(id);
 			const newTrail = [];
 			//wether the new trail should replace the old trail (don't play animation)
 			//or append it to the trails list (do play animation)
@@ -4751,7 +5211,7 @@ class GameConnection {
 			if (player.mydata) {
 				if (this.skipTrailRequestResponse) {
 					this.skipTrailRequestResponse = false;
-					game_connection.trailPushesDuringRequest = [];
+					this.trailPushesDuringRequest = [];
 				} else {
 					if (this.isRequestingMyTrail) {
 						this.isRequestingMyTrail = false;
@@ -4759,7 +5219,7 @@ class GameConnection {
 						for (const trail_push of this.trailPushesDuringRequest) {
 							newTrail.push(trail_push);
 						}
-						game_connection.trailPushesDuringRequest = [];
+						this.trailPushesDuringRequest = [];
 					}
 					//if last trail was emtpy (if entering enemy land) send a request for the new trail
 					if (player.trails.length > 0) {
@@ -4770,57 +5230,31 @@ class GameConnection {
 					}
 				}
 			}
-			if (replace) {
-				if (player.trails.length > 0) {
-					const last = player.trails[player.trails.length - 1];
-					last.trail = newTrail;
-					last.vanishTimer = 0;
-				} else {
-					replace = false;
-				}
-			}
-			if (!replace) {
-				player.trails.push({
-					trail: newTrail,
-					vanishTimer: 0,
-				});
-			}
+			this.game.updater.player_trail(id,newTrail,replace);
 		}
 		if (data[0] == receiveAction.EMPTY_TRAIL_WITH_LAST_POS) {
 			const id = bytesToInt(data[1], data[2]);
-			const player = game_state.getPlayer(id);
-			if (player.trails.length > 0) {
-				const prevTrail = player.trails[player.trails.length - 1].trail;
-				if (prevTrail.length > 0) {
-					const x = bytesToInt(data[3], data[4]);
-					const y = bytesToInt(data[5], data[6]);
-					prevTrail.push([x, y]);
-				}
-			}
-
+			const x = bytesToInt(data[3], data[4]);
+			const y = bytesToInt(data[5], data[6]);
 			//fix for trailing while in own land
 			//when your ping is high and trail very short
 			//(one block or so) you'll start trailing
 			//in your own land. It's a ghost trail and you make
 			//ghost deaths every time you hit the line
-			if (player.mydata && this.isRequestingMyTrail) {
+			if (id === 0 && this.isRequestingMyTrail) {
 				this.skipTrailRequestResponse = true;
 			}
 
-			player.trails.push({
-				trail: [],
-				vanishTimer: 0,
-			});
+			this.game.updater.player_empty_trail_with_last_pos(id,x,y);
 		}
 		if (data[0] == receiveAction.PLAYER_DIE) {
 			const id = bytesToInt(data[1], data[2]);
-			const player = game_state.getPlayer(id);
 			if (data.length > 3) {
 				const x = bytesToInt(data[3], data[4]);
 				const y = bytesToInt(data[5], data[6]);
-				player.pos = [x, y];
+				this.game.updater.player_die(id,x,y);
 			}
-			player.die(true);
+			this.game.updater.player_die(id);
 		}
 		if (data[0] == receiveAction.CHUNK_OF_BLOCKS) {
 			const x = bytesToInt(data[1], data[2]);
@@ -4828,13 +5262,7 @@ class GameConnection {
 			const w = bytesToInt(data[5], data[6]);
 			const h = bytesToInt(data[7], data[8]);
 			let i = 9;
-			for (let j = x; j < x + w; j++) {
-				for (let k = y; k < y + h; k++) {
-					const block = game_state.getBlock(j, k);
-					block.setBlockId(data[i], false);
-					i++;
-				}
-			}
+			this.game.updater.chunk_of_blocks(x,y,w,h,data.slice(9));
 			if (!this.hasReceivedChunkThisGame) {
 				this.hasReceivedChunkThisGame = true;
 				this.wsSendMsg(sendAction.READY);
@@ -4842,175 +5270,61 @@ class GameConnection {
 		}
 		if (data[0] == receiveAction.REMOVE_PLAYER) {
 			const id = bytesToInt(data[1], data[2]);
-			game_state.players.delete(id);
+			this.game.updater.player_remove(id);
 		}
 		if (data[0] == receiveAction.PLAYER_NAME) {
 			const id = bytesToInt(data[1], data[2]);
 			const nameBytes = data.subarray(3, data.length);
 			const  name = Utf8ArrayToStr(nameBytes);
-			const player = game_state.getPlayer(id);
-			player.name = filter(name);
+			this.game.updater.player_name(id,name);
 		}
 		if (data[0] == receiveAction.MY_SCORE) {
-			const score = bytesToInt(data[1], data[2], data[3], data[4]);
+			const blocks = bytesToInt(data[1], data[2], data[3], data[4]);
 			const kills = data.length > 5 ? bytesToInt(data[5], data[6]) : 0;
-			scoreStatTarget = score;
-			realScoreStatTarget = score + kills * 500;
-			myKillsElem.innerHTML = kills;
+			this.game.updater.my_score(blocks,kills);
 		}
 		if (data[0] == receiveAction.MY_RANK) {
-			game_state.my_player.mydata.rank = bytesToInt(data[1], data[2]);
+			const rank = bytesToInt(data[1], data[2]);
 			this.myRankSent = true;
-			updateStats();
+			this.game.updater.my_rank(rank);
 		}
 		if (data[0] == receiveAction.LEADERBOARD) {
 			leaderboardElem.innerHTML = "";
-			game_state.total_players = bytesToInt(data[1], data[2]);
-			updateStats();
-			let i = 3;
-			let rank = 1;
-			while (true) {
-				if (i >= data.length) {
-					break;
-				}
-				const thisPlayerScore = bytesToInt(data[i], data[i + 1], data[i + 2], data[i + 3]);
-				const nameLen = data[i + 4];
-				const nameBytes = data.subarray(i + 5, i + 5 + nameLen);
-				const thisPlayerName = Utf8ArrayToStr(nameBytes);
-
-				//create table row
-				const tr = document.createElement("tr");
-				tr.className = "scoreRank";
-				const rankElem = document.createElement("td");
-				rankElem.innerHTML = "#" + rank;
-				tr.appendChild(rankElem);
-				const nameElem = document.createElement("td");
-				nameElem.innerHTML = filter(htmlEscape(thisPlayerName));
-				tr.appendChild(nameElem);
-				const scoreElem = document.createElement("td");
-				scoreElem.innerHTML = thisPlayerScore;
-				tr.appendChild(scoreElem);
-				leaderboardElem.appendChild(tr);
-
-				i = i + 5 + nameLen;
-				rank++;
-			}
-			if (game_state.total_players < 30 && doRefreshAfterDie && closeNotification === null) {
-				closeNotification = new TopNotification("This server is about to close, refresh to join a full server.");
-			}
+			const total_players = bytesToInt(data[1], data[2]);
+			this.game.updater.leaderboard(total_players,data.slice(3));
 		}
 		if (data[0] == receiveAction.MAP_SIZE) {
-			game_state.map_size = bytesToInt(data[1], data[2]);
+			this.game.updater.map_size(bytesToInt(data[1], data[2]))
 		}
 		if (data[0] == receiveAction.YOU_DED) {
-			if (data.length > 1) {
-				lastStat.blocks = bytesToInt(data[1], data[2], data[3], data[4]);
-				if (lastStat.blocks > bestStat.blocks) {
-					bestStat.blocks = lastStat.blocks;
-					lsSet("bestStatBlocks", bestStat.blocks);
-				}
-				lastStat.kills = bytesToInt(data[5], data[6]);
-				if (lastStat.kills > bestStat.kills) {
-					bestStat.kills = lastStat.kills;
-					lsSet("bestStatKills", bestStat.kills);
-				}
-				lastStat.leaderboard_rank = bytesToInt(data[7], data[8]);
-				if ((lastStat.leaderboard_rank < bestStat.leaderboard_rank || bestStat.leaderboard_rank <= 0) && lastStat.leaderboard_rank > 0) {
-					bestStat.leaderboard_rank = lastStat.leaderboard_rank;
-					lsSet("bestStatLbRank", bestStat.leaderboard_rank);
-				}
-				lastStat.alive = bytesToInt(data[9], data[10], data[11], data[12]);
-				if (lastStat.alive > bestStat.alive) {
-					bestStat.alive = lastStat.alive;
-					lsSet("bestStatAlive", bestStat.alive);
-				}
-				lastStat.no1_time = bytesToInt(data[13], data[14], data[15], data[16]);
-				if (lastStat.no1_time > bestStat.no1_time) {
-					bestStat.no1_time = lastStat.no1_time;
-					lsSet("bestStatNo1Time", bestStat.no1_time);
-				}
-				lastStatDeathType = data[17];
-				lastStatKiller = "";
-				document.getElementById("lastStats").style.display = null;
-				document.getElementById("bestStats").style.display = null;
-				lastStatCounter = 0;
-				lastStatTimer = 0;
-				lastStatValueElem.innerHTML = bestStatValueElem.innerHTML = "";
-				switch (lastStatDeathType) {
-					case 1:
-						if (data.length > 18) {
-							const nameBytes = data.subarray(18, data.length);
-							lastStatKiller = Utf8ArrayToStr(nameBytes);
-						}
-						break;
-					case 2:
-						lastStatKiller = "the wall";
-						break;
-					case 3:
-						lastStatKiller = "yourself";
-						break;
-				}
-			}
 			this.closedBecauseOfDeath = true;
-			allowSkipDeathTransition = true;
-			deathTransitionTimeout = window.setTimeout(() => {
-				// resetAll();
-				if (skipDeathTransition) {
-					transition_canvas.doTransition("", false, () => {
-						onClose();
-						resetAll();
-						connectWithTransition(true);
-					});
-				} else {
-					// console.log("before doTransition",isTransitioning);
-					transition_canvas.doTransition("GAME OVER", true, null, () => {
-						game_connection.onClose();
-						resetAll();
-					}, true);
-					// console.log("after doTransition",isTransitioning);
-				}
-				deathTransitionTimeout = null;
-			}, 1000);
+			this.game.updater.you_ded(data);
 		}
 		if (data[0] == receiveAction.MINIMAP) {
-			minimap_canvas.update_map(data);
+			this.game.updater.minimap(data);
 		}
 		if (data[0] == receiveAction.PLAYER_SKIN) {
 			const id = bytesToInt(data[1], data[2]);
-			const player = game_state.getPlayer(id);
-			player.skinBlock = data[3];
-			if (player.mydata) {
-				colorUI();
-			}
+			this.game.updater.player_skin(id,data[3]);
 		}
 		if (data[0] == receiveAction.READY) {
-			playingAndReady = true;
-			if (!isTransitioning) {
-				isTransitioning = true;
-				onConnectOrMiddleOfTransition();
-			}
+			this.game.updater.ready();
 		}
 		if (data[0] == receiveAction.PLAYER_HIT_LINE) {
 			const id = bytesToInt(data[1], data[2]);
-			const player = game_state.getPlayer(id);
 			const pointsColor = getColorForBlockSkinId(data[3]);
 			const x = bytesToInt(data[4], data[5]);
 			const y = bytesToInt(data[6], data[7]);
 			const hitSelf = data.length > 8 && data[8] == 1;
-
-			player.addHitLine([x, y], pointsColor, hitSelf);
-			if (player.mydata && !hitSelf) {
-				main_canvas.doCamShakeDir(player.dir, 10, false);
-			}
+			this.game.updater.player_hit_line(id,pointsColor,x,y,hitSelf);
 		}
 		if (data[0] == receiveAction.REFRESH_AFTER_DIE) {
 			doRefreshAfterDie = true;
 		}
 		if (data[0] == receiveAction.PLAYER_HONK) {
 			const id = bytesToInt(data[1], data[2]);
-			const player = game_state.getPlayer(id);
 			const time = data[3];
-			player.doHonk(time);
+			this.game.updater.player_honk(id,time);
 		}
 		if (data[0] == receiveAction.PONG) {
 			const ping = Date.now() - this.lastPingTime;
@@ -5024,51 +5338,133 @@ class GameConnection {
 		}
 		if (data[0] == receiveAction.UNDO_PLAYER_DIE) {
 			const id = bytesToInt(data[1], data[2]);
-			const player = game_state.getPlayer(id);
-			player.undoDie();
+			this.game.updater.player_undo_die(id);
 		}
 		if (data[0] == receiveAction.TEAM_LIFE_COUNT) {
 			const currentLives = data[1];
 			const totalLives = data[2];
-			life_box.setLives(currentLives, totalLives);
+			this.game.updater.life_count(currentLives,totalLives);
 		}
-	}
-	//#endregion
-
-	//#region State
-	movePlayers(){
-
 	}
 	//#endregion
 }
 
+class RegisteredConnection {
+	constructor(url,game){
+		this.recording=url
+		this.data=undefined;
+		this.game = game;
+		this.starting_time = performance.now();
+		this.offset = null;
+		this.progress = undefined;
+
+		//dummies
+		this.isRequestingMyTrail = false;
+		this.trailPushesDuringRequest = [];
+		this.lastChangedDirPos = [0,0];
+		this.lastClientsideMoves = [];
+		this.sendDirQueue = [];
+		this.serverAvgPing = 0;
+		this.serverDiffPing = 0;
+		this.serverLastPing = 0;
+		
+		console.log('Starting Replay');
+		window.requestAnimationFrame(this.fake.bind(this));
+
+	}
+
+	fake(timeStamp){
+		if(this.data){
+			console.log("Using data", this.data);
+			if(this.data.time-this.offset<timeStamp-this.starting_time){
+				console.log(this.data.call);
+				this.game.updater[this.data.call](...this.data.args);
+				this.data=undefined;
+				this.progress+=1;
+			} else {
+				console.log(this.data.time-this.offset,timeStamp-this.starting_time);
+			}
+			window.requestAnimationFrame(this.fake.bind(this));
+		} else {
+			console.log("Requesting next data",this.progress);
+			let listing_store = db.transaction(["recording_data"],"readonly").objectStore('recording_data');
+			const req = listing_store.index("recording").openCursor(this.recording);
+			req.onsuccess = e => {
+				const cursor = e.target.result;
+				if(cursor){
+					const data = cursor.value;
+					if(this.offset === null){
+						this.offset = data.time;
+					} else if(this.progress > cursor.primaryKey){
+						cursor.continuePrimaryKey(this.recording,this.progress);
+						return
+					}
+					this.data=data;
+					this.progress = cursor.primaryKey;
+					window.requestAnimationFrame(this.fake.bind(this));
+				} else {
+					console.log("finished");
+				}
+			}
+		}
+	}
+
+	onClose(){
+		if (!playingAndReady) {
+			if (!isTransitioning) {
+				if (couldntConnect()) {
+					showBeginHideMainCanvas();
+				}
+			} else {
+				showCouldntConnectAfterTransition = true;
+			}
+		}
+		this.ws = null;
+		this.isConnecting = false;
+	}
+
+	sendDir(...args){}
+	wsSendMsg(...args){}
+	wsSendMsg(...args){}
+	render(...args){}
+	startRequestMyTrail(...args){}
+
+}
+
 function doConnect() {
-	if (!game_connection && !isTransitioning) {
+	if (!one_game && !isTransitioning) {
 		const server = getSelectedServer();
 		if (!server) {
 			onClose();
 			return false;
 		}
-		game_connection = new GameConnection(server);
+		if(logger !== null ){
+			one_game = new OneGame(logger,game_state,true);
+		}else{
+			one_game = new OneGame(server,game_state);
+		}
+		one_game.addEventListener('update_my_rank', ev => {
+			left_stats.rank_update(ev.detail.rank,ev.detail.total)
+		});
+		one_game.addEventListener('update_my_score', ev => {
+			left_stats.score_update(ev.detail.blocks,ev.detail.kills);
+		})
 	}
 	return false;
 }
 
 //basically like refreshing the page
 function resetAll() {
-	if (!!game_connection && !!game_connection.ws && game_connection.ws.readyState == WebSocket.OPEN) {
-		game_connection.ws.close();
+	if (!!one_game && !!one_game.connection.ws && one_game.connection.ws.readyState == WebSocket.OPEN) {
+		one_game.connection.ws.close();
 	}
-	game_connection = null;
+	logger??=one_game.listing;
+	one_game = null;
 	game_state.reset();
 	main_canvas.reset();
 	beginScreenVisible = true;
 	updateCmpPersistentLinkVisibility();
-	scoreStat =
-		scoreStatTarget =
-		realScoreStat =
-		realScoreStatTarget =
-			25;
+	left_stats.reset();
 	playingAndReady = false;
 	title_canvas.resetNextFrame = true;
 	allowSkipDeathTransition = false;
@@ -5285,17 +5681,6 @@ function checkPatreonQuery() {
 	return found;
 }
 //#endregion
-
-//updates the stats in the bottom left corner
-function updateStats() {
-	if (game_state.my_player.mydata.rank > game_state.total_player && game_connection?.myRankSent) {
-		game_state.total_player = game_state.my_player.mydata.rank;
-	} else if ((game_state.total_player < game_state.my_player.mydata.rank) || (game_state.my_player.mydata.rank === 0 && game_state.total_player > 0)) {
-		game_state.my_player.mydata.rank = game_state.total_player;
-	}
-	myRankElem.innerHTML = game_state.my_player.mydata.rank;
-	totalPlayersElem.innerHTML = game_state.total_players;
-}
 
 /** draws a trail on a canvas, can be drawn on multiple canvases
  * when drawCalls contains more than one object
@@ -5702,15 +6087,15 @@ function calcTouch(customTouch, touch) {
 	if (deltaTime > 0 && speed > 2) {
 		if (Math.abs(xOffset) > Math.abs(yOffset)) {
 			if (xOffset > 0) {
-				sendDir(2);
+				return 2;
 			} else {
-				sendDir(0);
+				return 0;
 			}
 		} else {
 			if (yOffset > 0) {
-				sendDir(3);
+				return 3;
 			} else {
-				sendDir(1);
+				return 1;
 			}
 		}
 	}
