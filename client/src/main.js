@@ -869,6 +869,12 @@ class SplixBaseCanvas {
 	ctx;
 	/**@type {canvasTransformTypes} */ // TODO: this should be removed in the end
 	canvasTransformType;
+	/**@type {number} */
+	current_width;
+	/**@type {number} */
+	current_height;
+	/**@type {number} */
+	current_style_ratio;
 	constructor(canvas){
 		if(canvas === undefined){
 			canvas = document.createElement('canvas');
@@ -889,11 +895,20 @@ class SplixBaseCanvas {
 		}
 		const quality = dontUseQuality ? 1 : canvasQuality;
 		const w = this.w, h = this.h;
-		// PIXEL_RATIO = 1;
-		canvas.width = w * MAX_PIXEL_RATIO * quality;
-		canvas.height = h * MAX_PIXEL_RATIO * quality;
-		canvas.style.width = w * this.styleRatio + "px";
-		canvas.style.height = h * this.styleRatio + "px";
+		if(w !== this.current_width || h !== this.current_height || canvas !== this.canvas){
+			this.current_width = w;
+			this.current_height = h;
+			this.current_style_ratio = this.styleRatio;
+			// PIXEL_RATIO = 1;
+			canvas.width = w * MAX_PIXEL_RATIO * quality;
+			canvas.height = h * MAX_PIXEL_RATIO * quality;
+			canvas.style.width = w * this.styleRatio + "px";
+			canvas.style.height = h * this.styleRatio + "px";
+		} else if(this.styleRatio !== this.current_style_ratio) {
+			this.current_style_ratio = this.styleRatio;
+			canvas.style.width = w * this.styleRatio + "px";
+			canvas.style.height = h * this.styleRatio + "px";
+		}
 	}
 
 	get w(){
@@ -934,6 +949,7 @@ class SplixBaseCanvas {
 		}
 		if (setSize) {
 			this.setCanvasSize(dontUseQuality,ctx.canvas);
+			ctx.reset();
 		}
 		ctx.save();
 		if (this.canvasTransformType != canvasTransformTypes.MAIN && this.canvasTransformType != canvasTransformTypes.SKIN) {
@@ -1570,8 +1586,10 @@ class SplixCanvas extends SplixBaseCamera {
 		debugging.frames += 1;
 		const ctx = this.ctx;
 		this.setCanvasSize();
+		this.ctx.reset()
 		if (!uglyMode) {
 			this.setCanvasSize(false,this.linesCanvas);
+			this.linesCtx.reset();
 		}
 
 		//BG
@@ -1679,9 +1697,9 @@ class SplixCanvas extends SplixBaseCamera {
 
 	/** display the ping information */
 	display_ping(avg,last,diff){
-		avg = Math.round(avg);
-		last = Math.round(last);
-		diff = Math.round(diff);
+		avg = avg ? Math.round(avg) : "";
+		last = last ? Math.round(last) : "";
+		diff = diff ? Math.round(diff) : "";
 		const str = "avg:" + avg + " last:" + last + " diff:" + diff;
 		this.ctx.font = "14px Arial, Helvetica, sans-serif";
 		this.ctx.fillStyle = colors.red.brighter;
@@ -1815,6 +1833,7 @@ class SplixLogoCanvas extends SplixBaseCanvas {
 		this.lastRender = timeStamp;
 
 		this.setCanvasSize(true);
+		this.ctx.reset();
 		this.ctxApplyCamTransform(false, true);
 
 		this.drawTitle(true, 0, true);
@@ -1891,6 +1910,7 @@ class TransitionCanvas extends SplixBaseCanvas {
 			this.canvas.style.display = "none";
 		} else {
 			this.setCanvasSize(true);
+			this.ctx.reset();
 
 			const w = this.w, h = this.h;
 			const t = this.timer;
@@ -2259,8 +2279,11 @@ class TutorialCanvas extends SplixBaseCamera {
 	render(timeStamp,deltaTime){
 		this.timer += deltaTime * GLOBAL_SPEED * 0.7;
 		this.setCanvasSize();
+		this.ctx.reset();
 		if (!uglyMode) {
 			this.setCanvasSize(undefined,this.linesCanvas);
+			this.linesCtx.reset();
+
 		}
 
 		//BG
@@ -2442,6 +2465,8 @@ class SkinButtonCanvas extends SplixBaseCamera {
 			}
 		});
 		this.block.setBlockId(currentColor + 1, false);
+		this.block.x = 0;
+		this.block.y = 0;
 		this.canvas.addEventListener('mouseover', () => {
 			// TODO Live update skin color without needing to mouseover (listen to storage events)
 			// this currently is just for animation purposes
@@ -2483,6 +2508,7 @@ class Minimap {
 	/** @type {SplixState} */
 	state;
 	/** @type {number?} */
+	map_size;
 	constructor(state,canvas,dot_elem){
 		this.canvas = canvas;
 		this.ctx = this.canvas.getContext("2d");
@@ -2508,9 +2534,14 @@ class Minimap {
 		}
 	}
 
+	update_size(map_size){
+		this.map_size = map_size;
+	}
+
 	update_player(pos){
-		this.dot_elem.style.left = (pos[0] / this.dot_elem.map_size * 160 + 1.5) + "px";
-		this.dot_elem.style.top = (pos[1] / this.dot_elem.map_size * 160 + 1.5) + "px";
+
+		this.dot_elem.style.left = (pos[0] / this.map_size * 160 + 1.5) + "px";
+		this.dot_elem.style.top = (pos[1] / this.map_size * 160 + 1.5) + "px";
 	}
 
 	reset(){
@@ -2612,6 +2643,7 @@ class SkinScreen extends SplixBaseCamera {
 
 	render(deltaTime){
 		this.ctxApplyCamTransform(true);
+		this.ctx.clearRect(0,0,this.w,this.h);
 		this.drawBlocks(deltaTime,this.state.blocks);
 		this.ctx.restore();
 	}
@@ -2981,7 +3013,7 @@ class InputHanlder {
 			time = iLerp(0, 1000, time);
 			time *= 255;
 			time = Math.floor(time);
-			this.game.honk(time);
+			one_game.honk(time);
 		}
 	}
 
@@ -3164,7 +3196,7 @@ class RenderingLoop {
 			}
 		}
 
-		this.deltaTime = 16.66//realDeltaTime + this.totalDeltaTimeFromCap; TODO remove this comment
+		this.deltaTime = realDeltaTime + this.totalDeltaTimeFromCap;
 		this.prevTimeStamp = timeStamp;
 		if (this.deltaTime < getDtCap(this.currentDtCap) && localStorage.dontCapFps != "true") {
 			this.totalDeltaTimeFromCap += realDeltaTime;
@@ -3192,8 +3224,6 @@ class RenderingLoop {
 
 			//top notification
 			TopNotification.update_all(this.deltaTime)
-
-			engagement.set_is_playing(playingAndReady && (Date.now() - (one_game.connection?.lastSendDirTime ?? 0)) < 20000);
 
 			//title
 			if (beginScreenVisible && timeStamp - title_canvas.lastRender > 49) {
@@ -3527,6 +3557,7 @@ class Player extends EventTarget {
 		this.skinBlock= 0;
 		this.hasReceivedPosition= false;
 	}
+
 	die(deathWasCertain) {
 		deathWasCertain = !!deathWasCertain;
 		if (this.isDead) {
@@ -3787,8 +3818,18 @@ class OneGame extends EventTarget {
 		if(!fake){
 			let listing_store = db.transaction(["recording_listing"],"readwrite").objectStore('recording_listing');
 			listing_store.add({time: Date.now()}).onsuccess = ev => {
-				this.connection = new GameConnection(url,this);
-				this.listing = ev.target.result;
+				connection_worker.postMessage({
+						request: "start_connection",
+						args: {
+							url,
+							name: nameInput.value,
+							skinColor: localStorage.getItem("skinColor"),
+							skinPattern: localStorage.getItem("skinPattern"),
+							patreonLastSplixCode: localStorage.patreonLastSplixCode,
+							recording: ev.target.result,
+							replay: "recording",
+						}
+				});
 			};
 			const that = this;
 			this.updater = new Proxy({},{
@@ -3805,33 +3846,39 @@ class OneGame extends EventTarget {
 				}
 			})
 		} else {
-			const that = this;
-
-			this.connection = new RegisteredConnection(url,this);
-			this.updater = new Proxy({},{
-				get(_t,p,_r){
-					return (function u(...args){
-						(that["update_"+p].bind(that))(...args);
-					});
-				}
-			})
+			connection_worker.postMessage({
+					request: "start_connection",
+					args: {
+						url,
+						name: nameInput.value,
+						skinColor: localStorage.getItem("skinColor"),
+						skinPattern: localStorage.getItem("skinPattern"),
+						patreonLastSplixCode: localStorage.patreonLastSplixCode,
+						recording: url,
+						replay: "replay",
+					}
+			});
 		}
 	}
 
-	sendDir(dir){
-		this.connection.sendDir(dir);
+	sendDir(dir,skipQueue){
+		connection_worker.postMessage({
+			call: "sendDir",
+			args: [dir,skipQueue,this.#state.my_player.mydata.myPos,this.#state.my_player.dir],
+		})
 	}
 
 	honk(time){
-		this.connection.wsSendMsg(sendAction.HONK, time);
+		connection_worker.postMessage({
+			call: "wsSendMsg",
+			args: [sendAction.HONK, time],
+		})
 		this.#state.my_player?.doHonk(Math.max(70, time));
 	}
 
 	update(deltaTime){
 		// update the player positions
 		this.#state.update(deltaTime);
-		// change dir queue
-		this.connection.render();
 	}
 
 	/**
@@ -3851,8 +3898,11 @@ class OneGame extends EventTarget {
 						pos = [pos[0], pos[1]];
 					}
 					lastTrail.push(pos);
-					if (player.mydata && this.connection.isRequestingMyTrail) {
-						this.connection.trailPushesDuringRequest.push(pos);
+					if (player.mydata) {
+						connection_worker.postMessage({
+							call: "myTrailPush",
+							args: [pos],
+						})
 					}
 				}
 			}
@@ -3869,35 +3919,40 @@ class OneGame extends EventTarget {
 	changeMyDir(dir, newPos, extendTrail, isClientside) {
 		this.#state.my_player.dir = this.#state.my_player.mydata.nextDir = dir;
 		this.#state.my_player.pos = [newPos[0], newPos[1]];
-		this.connection.lastChangedDirPos = [newPos[0], newPos[1]];
-	
+		
 		if (extendTrail === undefined) {
 			extendTrail = true;
 		}
 		if (isClientside === undefined) {
 			isClientside = true;
 		}
-	
+		
 		if (extendTrail) {
-			one_game.trailPush(this.#state.my_player);
+			this.trailPush(this.#state.my_player);
 		}
-	
-		if (isClientside) {
-			this.connection.lastClientsideMoves.push({
-				dir: dir,
-				pos: newPos,
-			});
-		}
+		
+		connection_worker.postMessage({
+			call: "changeMyDir",
+			args: [newPos,dir,isClientside],
+		})
 	}
 
 	update_change_dir({next_dir, at, is_horizontal}){
 		this.#state.my_player.mydata.nextDir = next_dir;
 		this.#state.my_player.mydata.changeDirAt = at;
 		this.#state.my_player.mydata.changeDirAtIsHorizontal = is_horizontal;
+		//hide cursor // TODO Move this somewhere else
+		input_handler.mouseHidePos = [input_handler.lastMousePos[0], input_handler.lastMousePos[1]];
+		document.body.style.cursor = "none";
+		lastMyPosHasBeenConfirmed = false;
 	}
 
 	update_change_my_dir(dir,newPos){
 		this.changeMyDir(dir, newPos);
+		//hide cursor // TODO Move this somewhere else
+		input_handler.mouseHidePos = [input_handler.lastMousePos[0], input_handler.lastMousePos[1]];
+		document.body.style.cursor = "none";
+		lastMyPosHasBeenConfirmed = false;
 	}
 
 	
@@ -3915,7 +3970,7 @@ class OneGame extends EventTarget {
 	 * Get ping information.
 	 */
 	get_ping_info(){
-		return [this.connection.serverAvgPing,this.connection.serverLastPing,this.connection.serverDiffPing];
+		return [this.serverAvgPing,this.serverLastPing,this.serverDiffPing];
 	}
 
 	getPlayer(id){
@@ -3983,8 +4038,10 @@ class OneGame extends EventTarget {
 				//doSetPos is true, so the server thinks the player is somewhere
 				//else than the client thinks he is. To prevent the trail from
 				//getting messed up, request the full trail
-				this.connection.startRequestMyTrail();
-				this.connection.sendDirQueue = [];
+				connection_worker.postMessage({
+					call: "startRequestMyTrail",
+					args: [true],
+				});
 			}
 
 			//always set the server position
@@ -4017,6 +4074,18 @@ class OneGame extends EventTarget {
 
 	update_player_trail(id,new_trail,replace){
 		const player = this.getPlayer(id);
+		if(id === 0){
+			//if last trail was emtpy (if entering enemy land) send a request for the new trail
+			if (player.trails.length > 0) {
+				const lastTrail = player.trails[player.trails.length - 1];
+				if (lastTrail.trail.length <= 0 && new_trail.length > 0) {
+					connection_worker.postMessage({
+						call: "startRequestMyTrail",
+						args: [],
+					})
+				}
+			}
+		}
 		if (replace) {
 			if (player.trails.length > 0) {
 				const last = player.trails[player.trails.length - 1];
@@ -4075,11 +4144,12 @@ class OneGame extends EventTarget {
 	}
 
 	update_player_hit_line(id,pointsColor,x,y,hitSelf){
-			const player = this.getPlayer(id);
-			player.addHitLine([x, y], pointsColor, hitSelf);
-			if (player.mydata && !hitSelf) {
-				main_canvas.doCamShakeDir(player.dir, 10, false);
-			}
+		pointsColor=getColorForBlockSkinId(pointsColor);
+		const player = this.getPlayer(id);
+		player.addHitLine([x, y], pointsColor, hitSelf);
+		if (player.mydata && !hitSelf) {
+			main_canvas.doCamShakeDir(player.dir, 10, false);
+		}
 	}
 
 	update_player_honk(id,time){
@@ -4153,7 +4223,10 @@ class OneGame extends EventTarget {
 			} else {
 				// console.log("before doTransition",isTransitioning);
 				transition_canvas.doTransition("GAME OVER", true, null, () => {
-					this.connection.onClose();
+					connection_worker.postMessage({
+						call: "onClose",
+						args: [],
+					});
 					resetAll();
 				}, true);
 				// console.log("after doTransition",isTransitioning);
@@ -4175,7 +4248,7 @@ class OneGame extends EventTarget {
 		}
 		this.dispatchEvent(new CustomEvent('update_my_rank', {detail: {
 			rank: this.#state.my_player.mydata.rank,
-			totlal_players: this.#state.total_players,
+			total_players: this.#state.total_players,
 		}}));
 	}
 
@@ -4245,6 +4318,7 @@ class OneGame extends EventTarget {
 
 	update_map_size(size){
 		this.#state.map_size = size;
+		minimap_canvas.update_size(size);
 	}
 
 	update_life_count(currentLives,totalLives){
@@ -4256,6 +4330,39 @@ class OneGame extends EventTarget {
 		if (!isTransitioning) {
 			isTransitioning = true;
 			onConnectOrMiddleOfTransition();
+		}
+	}
+
+	update_ping(avg,last,diff){
+		this.serverAvgPing = avg;
+		this.serverLastPing = last;
+		this.serverDiffPing = diff;
+	}
+
+	update_onopen(){
+		countPlayGame();
+		document.body.dataset.state="playing";
+		if (playingAndReady) {
+			onConnectOrMiddleOfTransition();
+		}
+	}
+
+	update_onclose(closedBecauseOfDeath){
+		if (!playingAndReady) {
+			if (!isTransitioning) {
+				if (couldntConnect()) {
+					showBeginHideMainCanvas();
+				}
+			} else {
+				// TODO showCouldntConnectAfterTransition = true;
+			}
+		} else if (!closedBecauseOfDeath) {
+			transition_canvas.doTransition("", false, resetAll);
+			// ga("send","event","Game","lost_connection_mid_game");
+			// _paq.push(['trackEvent', 'Game', 'lost_connection_mid_game']);
+			setNotification("The connection was lost :/");
+		} else {
+			//disconnect because of death 
 		}
 	}
 }
@@ -4345,6 +4452,25 @@ var isConnectingWithTransition = false;
 
 /**@type {OneGame?} */
 let one_game = null;
+
+let connection_worker = new Worker('src/connection.js');
+
+connection_worker.onmessage = ev => {
+	const message = ev.data;
+	if(typeof message.request === "string"){
+		if(message.request === "get_send_dir_data"){
+			connection_worker.postMessage({
+				response: "get_send_dir_data",
+				result: one_game.get_send_dir_data(),
+				id: message.id,
+			})
+		} else {
+			console.warn('Unknown request :', message.request);
+		}
+	} else if (typeof message.call === "string") {
+		if(one_game) one_game['update_'+message.call].call(one_game,...message.args);
+	}
+};
 //#endregion Declarations
 
 
@@ -4803,634 +4929,6 @@ function connectWithTransition(dontDoAds) {
 	}
 }
 
-class GameConnection {
-	ws;
-	url;
-
-	/** @type {OneGame} Associated state */
-	game;
-	
-	// Status
-	isConnecting = true;
-	closedBecauseOfDeath = false;
-	myRankSent = false;
-	hasReceivedChunkThisGame = false;
-	
-	// Ping
-	serverAvgPing = 0;
-	serverLastPing = 0;
-	serverDiffPing = 0;
-	lastPingTime = 0;
-	waitingForPing = false;
-	
-	// Trail
-	isRequestingMyTrail = false;
-	skipTrailRequestResponse = false;
-	trailPushesDuringRequest = [];
-
-	// Direction/moving
-	lastSendDir = -1;
-	lastSendDirTime = 0;
-	sendDirQueue = [];
-	lastChangedDirPos = null;
-	lastClientsideMoves = [];
-
-	/** @type {number}  time stamp of the opening of the websocket connection */
-	onOpenTime;
-	constructor(url,game){
-		this.url = url;
-		this.game = game;
-		showCouldntConnectAfterTransition = false; // TODO
-		this.ws = new WebSocket(url);
-		this.ws.binaryType = "arraybuffer";
-		const that = this;
-		this.ws.onmessage = function (evt) {
-			if (that.ws == this) {
-				that.onMessage(evt);
-			}
-		};
-		this.ws.onclose = function (evt) {
-			if (that.ws == this) {
-				that.onClose(evt);
-			}
-		};
-		this.ws.onopen = function (evt) {
-			if (that.ws == this) {
-				that.onOpen(evt);				
-			}
-		};
-	}
-
-	//#region Server communication
-	//when WebSocket connection is established
-	onOpen(evt){
-		this.isConnecting = false;
-		document.body.dataset.state="playing";
-		this.sendLegacyVersion();
-		this.sendPatreonCode();
-		this.sendName();
-		this.sendSkin();
-		this.wsSendMsg(sendAction.READY);
-		if (playingAndReady) {
-			onConnectOrMiddleOfTransition();
-		}
-		countPlayGame();
-		this.onOpenTime = Date.now();
-	}
-
-	//when WebSocket connection is closed
-	onClose() {
-		if (!!this && !!this.ws && this.ws.readyState == WebSocket.OPEN) {
-			this.ws.close();
-		}
-		if (!playingAndReady) {
-			if (!isTransitioning) {
-				if (couldntConnect()) {
-					showBeginHideMainCanvas();
-				}
-			} else {
-				showCouldntConnectAfterTransition = true;
-			}
-		} else if (!this.closedBecauseOfDeath) {
-			transition_canvas.doTransition("", false, resetAll);
-			// ga("send","event","Game","lost_connection_mid_game");
-			// _paq.push(['trackEvent', 'Game', 'lost_connection_mid_game']);
-			setNotification("The connection was lost :/");
-		} else {
-			//disconnect because of death 
-		}
-		this.ws = null;
-		this.isConnecting = false;
-	}
-
-	//sends a legacy message which is required for older servers
-	sendLegacyVersion() {
-		this.wsSendMsg(sendAction.VERSION, {
-			type: 0,
-			ver: 28,
-		});
-	}
-
-	//sends current skin to websocket
-	sendSkin() {
-		let blockColor = localStorage.getItem("skinColor");
-		if (blockColor === null) {
-			blockColor = 0;
-		}
-		let pattern = localStorage.getItem("skinPattern");
-		if (pattern === null) {
-			pattern = 0;
-		}
-		this.wsSendMsg(sendAction.SKIN, {
-			blockColor: blockColor,
-			pattern: pattern,
-		});
-	}
-
-	sendPatreonCode() {
-		const patreonLastSplixCode = localStorage.patreonLastSplixCode;
-		if (patreonLastSplixCode !== "" && patreonLastSplixCode !== undefined) {
-			this.wsSendMsg(sendAction.PATREON_CODE, patreonLastSplixCode);
-		}
-	}
-
-	//sends name to websocket
-	sendName() {
-		const n = nameInput.value;
-		if (n !== undefined && n !== null && n !== "" && n.trim() !== "") {
-			this.wsSendMsg(sendAction.SET_USERNAME, n);
-		}
-	}
-
-	startRequestMyTrail() {
-		this.isRequestingMyTrail = true;
-		this.trailPushesDuringRequest = [];
-		this.wsSendMsg(sendAction.REQUEST_MY_TRAIL);
-	}
-	
-	sendDir(dir, skipQueue) {
-		let data = this.game.get_send_dir_data();
-		// my_player doesn't exist
-		if(data === undefined) return false;
-		const {my_dir,my_pos} = data;
-	
-		//prevent spamming sendDir function
-		if (
-			dir == this.lastSendDir && //if dir is same as old sendDir call
-			(Date.now() - this.lastSendDirTime) < 0.7 / GLOBAL_SPEED // if last call was less than 'one block travel time' ago
-		) {
-			return false;
-		}
-		this.lastSendDir = dir;
-		this.lastSendDirTime = Date.now();
-	
-		//dir is already the current direction, don't do anything
-		if (my_dir == dir) {
-			// console.log("already current direction, don't do anything");
-			this.addSendDirQueue(dir, skipQueue);
-			return false;
-		}
-	
-		//if dir is the opposite direction
-		if (
-			(dir === 0 && my_dir == 2) ||
-			(dir == 2 && my_dir === 0) ||
-			(dir == 1 && my_dir == 3) ||
-			(dir == 3 && my_dir == 1)
-		) {
-			// console.log("already opposite direction, don't send");
-			this.addSendDirQueue(dir, skipQueue);
-			return false;
-		}
-	
-		//hide cursor
-		input_handler.mouseHidePos = [input_handler.lastMousePos[0], input_handler.lastMousePos[1]];
-		document.body.style.cursor = "none";
-	
-		//wether next direction is horizontal movement or not
-		const horizontal = my_dir == 1 || my_dir == 3;
-		const coord = my_pos[horizontal ? 1 : 0];
-		const newPos = [my_pos[0], my_pos[1]];
-		const roundCoord = Math.round(coord);
-		newPos[horizontal ? 1 : 0] = roundCoord;
-	
-		// console.log("test already sent");
-	
-		//test if the coordinate being sent wasn't already sent earlier
-		// console.log(lastChangedDirPos);
-		if (
-			(my_dir === 0 && newPos[0] <= this.lastChangedDirPos[0]) ||
-			(my_dir == 1 && newPos[1] <= this.lastChangedDirPos[1]) ||
-			(my_dir == 2 && newPos[0] >= this.lastChangedDirPos[0]) ||
-			(my_dir == 3 && newPos[1] >= this.lastChangedDirPos[1])
-		) {
-			// console.log("same coordinate, don't send");
-			this.addSendDirQueue(dir, skipQueue);
-			return false;
-		}
-	
-		let changeDirNow = false;
-		const blockPos = coord - Math.floor(coord);
-		if (my_dir <= 1) { //right or down
-			if (blockPos < 0.45) {
-				changeDirNow = true;
-			}
-		} else if (my_dir <= 3) { //left or up
-			if (blockPos > 0.55) {
-				changeDirNow = true;
-			}
-		} else { //paused
-			changeDirNow = true;
-		}
-	
-		// console.log("changeDirNow",changeDirNow);
-	
-		if (changeDirNow) {
-			this.game.updater.change_my_dir(dir, newPos);
-		} else {
-			this.game.updater.change_dir({
-				next_dir: dir,
-				at: roundCoord,
-				is_horizontal: horizontal,
-			})
-			this.lastChangedDirPos = [newPos[0], newPos[1]];
-		}
-		lastMyPosSetClientSideTime = Date.now();
-		if (lastMyPosHasBeenConfirmed) {
-			lastMyPosSetValidClientSideTime = Date.now();
-		}
-		lastMyPosHasBeenConfirmed = false;
-		// console.log("send ======= UPDATE_DIR ======",dir,newPos);
-		this.wsSendMsg(sendAction.UPDATE_DIR, {
-			dir: dir,
-			coord: newPos,
-		});
-		return true;
-	}
-
-	render(){ // TODO give a better name to this method
-		if (this.sendDirQueue.length > 0) {
-			const thisDir = this.sendDirQueue[0];
-			if (
-				Date.now() - thisDir.addTime > 1.2 / GLOBAL_SPEED || // older than '1.2 blocks travel time'
-				this.sendDir(thisDir.dir, true) // senddir call was successful
-			) {
-				this.sendDirQueue.shift(); //remove item
-			}
-		}
-		const maxPingTime = this.waitingForPing ? 10000 : 5000;
-		if (Date.now() - this.lastPingTime > maxPingTime) {
-			this.lastPingTime = Date.now();
-			if (this.wsSendMsg(sendAction.PING)) {
-				this.waitingForPing = true;
-			}
-		}
-	}
-
-	addSendDirQueue(dir, skip) {
-		// console.log("adding sendDir to queue", dir, skip);
-		if (!skip && this.sendDirQueue.length < 3) {
-			this.sendDirQueue.push({
-				dir: dir,
-				addTime: Date.now(),
-			});
-		}
-	}
-
-	/**
-	 * send a message to the websocket, returns true if successful
-	 * @param {sendAction} action
-	 * @param {Record<string,any>} data 
-	 * @returns {bool} `true` if successful
-	 */
-	wsSendMsg(action, data) {
-		let utf8Array;
-		if (!!this.ws && this.ws.readyState == WebSocket.OPEN) {
-			const array = [action];
-			if (action == sendAction.UPDATE_DIR) {
-				array.push(data.dir);
-				const coordBytesX = intToBytes(data.coord[0], 2);
-				array.push(coordBytesX[0]);
-				array.push(coordBytesX[1]);
-				const coordBytesY = intToBytes(data.coord[1], 2);
-				array.push(coordBytesY[0]);
-				array.push(coordBytesY[1]);
-			}
-			else if (
-				action == sendAction.SET_USERNAME || action == sendAction.SET_TEAM_USERNAME ||
-				action == sendAction.PATREON_CODE
-			){
-				utf8Array = toUTF8Array(data);
-				array.push.apply(array, utf8Array);
-			}
-			else if (action == sendAction.SKIN) {
-				array.push(data.blockColor);
-				array.push(data.pattern);
-			}
-			else if (action == sendAction.REQUEST_CLOSE) {
-				for (const b of data) {
-					array.push(b);
-				}
-			}
-			else if (action == sendAction.HONK) {
-				array.push(data);
-			}
-			else if (action == sendAction.MY_TEAM_URL) {
-				utf8Array = toUTF8Array(data);
-				array.push.apply(array, utf8Array);
-			}
-			else if (action == sendAction.VERSION) {
-				array.push(data.type);
-				const verBytes = intToBytes(data.ver, 2);
-				array.push(verBytes[0]);
-				array.push(verBytes[1]);
-			}
-			const payload = new Uint8Array(array);
-			try {
-				this.ws.send(payload);
-				return true;
-			} catch (ex) {
-				console.log("error sending message", action, data, array, ex);
-			}
-		}
-		return false;
-	}
-
-	//when receiving a message from the websocket
-	onMessage(evt) {
-		// console.log(evt);
-		let data = new Uint8Array(evt.data);
-		// console.log(evt.data);
-		// for(var key in receiveAction){
-		// 	if(receiveAction[key] == data[0]){
-		// 		console.log(key);
-		// 	}
-		// }
-		if (data[0] == receiveAction.UPDATE_BLOCKS) {
-			const x = bytesToInt(data[1], data[2]);
-			const y = bytesToInt(data[3], data[4]);
-			const type = data[5];
-			this.game.updater.block(x,y,type);
-		}
-		if (data[0] == receiveAction.PLAYER_POS) {
-			const x = bytesToInt(data[1], data[2]);
-			const y = bytesToInt(data[3], data[4]);
-			const id = bytesToInt(data[5], data[6]);
-			const new_dir = data[7];
-			let doSetPos = true;
-			if(id === 0){
-				//if dir and pos are the first item of lastClientsideMoves
-				//when two movements are made shortly after each other the
-				//previous check (dir && pos) won't suffice, eg:
-				// client makes move #1
-				// client makes move #2
-				// receives move #1 <-- different from current dir & pos
-				// recieves move #2
-				// console.log(lastClientsideMoves);
-				if (this.lastClientsideMoves.length > 0) {
-					const lastClientsideMove = this.lastClientsideMoves.shift();
-					if (
-						lastClientsideMove.dir == new_dir &&
-						lastClientsideMove.pos[0] == x &&
-						lastClientsideMove.pos[1] == y
-					) {
-						doSetPos = false;
-						// console.log("new dir is same as last isClientside move");
-						// console.log("doSetPos = false;");
-					} else {
-						this.lastClientsideMoves = [];
-						// console.log("empty lastClientsideMoves");
-					}
-				}
-			}
-			const extendTrail = data.length > 8 && data[8] == 1;
-			this.game.updater.player_pos(id, x, y,new_dir,extendTrail,doSetPos, this.serverAvgPing);
-			
-		}
-		if (data[0] == receiveAction.FILL_AREA) {
-			const x = bytesToInt(data[1], data[2]);
-			const y = bytesToInt(data[3], data[4]);
-			const w = bytesToInt(data[5], data[6]);
-			const h = bytesToInt(data[7], data[8]);
-			const type = data[9];
-			const pattern = data[10];
-			const isEdgeChunk = data[11];
-			this.game.updater.fill_area(x, y, w, h, type, pattern, isEdgeChunk);
-		}
-		if (data[0] == receiveAction.SET_TRAIL) {
-			const id = bytesToInt(data[1], data[2]);
-			const player = this.game.getPlayer(id);
-			const newTrail = [];
-			//wether the new trail should replace the old trail (don't play animation)
-			//or append it to the trails list (do play animation)
-			let replace = false;
-			for (let i = 3; i < data.length; i += 4) {
-				const coord = [bytesToInt(data[i], data[i + 1]), bytesToInt(data[i + 2], data[i + 3])];
-				newTrail.push(coord);
-			}
-			if (player.mydata) {
-				if (this.skipTrailRequestResponse) {
-					this.skipTrailRequestResponse = false;
-					this.trailPushesDuringRequest = [];
-				} else {
-					if (this.isRequestingMyTrail) {
-						this.isRequestingMyTrail = false;
-						replace = true;
-						for (const trail_push of this.trailPushesDuringRequest) {
-							newTrail.push(trail_push);
-						}
-						this.trailPushesDuringRequest = [];
-					}
-					//if last trail was emtpy (if entering enemy land) send a request for the new trail
-					if (player.trails.length > 0) {
-						const lastTrail = player.trails[player.trails.length - 1];
-						if (lastTrail.trail.length <= 0 && newTrail.length > 0) {
-							this.startRequestMyTrail();
-						}
-					}
-				}
-			}
-			this.game.updater.player_trail(id,newTrail,replace);
-		}
-		if (data[0] == receiveAction.EMPTY_TRAIL_WITH_LAST_POS) {
-			const id = bytesToInt(data[1], data[2]);
-			const x = bytesToInt(data[3], data[4]);
-			const y = bytesToInt(data[5], data[6]);
-			//fix for trailing while in own land
-			//when your ping is high and trail very short
-			//(one block or so) you'll start trailing
-			//in your own land. It's a ghost trail and you make
-			//ghost deaths every time you hit the line
-			if (id === 0 && this.isRequestingMyTrail) {
-				this.skipTrailRequestResponse = true;
-			}
-
-			this.game.updater.player_empty_trail_with_last_pos(id,x,y);
-		}
-		if (data[0] == receiveAction.PLAYER_DIE) {
-			const id = bytesToInt(data[1], data[2]);
-			if (data.length > 3) {
-				const x = bytesToInt(data[3], data[4]);
-				const y = bytesToInt(data[5], data[6]);
-				this.game.updater.player_die(id,x,y);
-			}
-			this.game.updater.player_die(id);
-		}
-		if (data[0] == receiveAction.CHUNK_OF_BLOCKS) {
-			const x = bytesToInt(data[1], data[2]);
-			const y = bytesToInt(data[3], data[4]);
-			const w = bytesToInt(data[5], data[6]);
-			const h = bytesToInt(data[7], data[8]);
-			let i = 9;
-			this.game.updater.chunk_of_blocks(x,y,w,h,data.slice(9));
-			if (!this.hasReceivedChunkThisGame) {
-				this.hasReceivedChunkThisGame = true;
-				this.wsSendMsg(sendAction.READY);
-			}
-		}
-		if (data[0] == receiveAction.REMOVE_PLAYER) {
-			const id = bytesToInt(data[1], data[2]);
-			this.game.updater.player_remove(id);
-		}
-		if (data[0] == receiveAction.PLAYER_NAME) {
-			const id = bytesToInt(data[1], data[2]);
-			const nameBytes = data.subarray(3, data.length);
-			const  name = Utf8ArrayToStr(nameBytes);
-			this.game.updater.player_name(id,name);
-		}
-		if (data[0] == receiveAction.MY_SCORE) {
-			const blocks = bytesToInt(data[1], data[2], data[3], data[4]);
-			const kills = data.length > 5 ? bytesToInt(data[5], data[6]) : 0;
-			this.game.updater.my_score(blocks,kills);
-		}
-		if (data[0] == receiveAction.MY_RANK) {
-			const rank = bytesToInt(data[1], data[2]);
-			this.myRankSent = true;
-			this.game.updater.my_rank(rank);
-		}
-		if (data[0] == receiveAction.LEADERBOARD) {
-			leaderboardElem.innerHTML = "";
-			const total_players = bytesToInt(data[1], data[2]);
-			this.game.updater.leaderboard(total_players,data.slice(3));
-		}
-		if (data[0] == receiveAction.MAP_SIZE) {
-			this.game.updater.map_size(bytesToInt(data[1], data[2]))
-		}
-		if (data[0] == receiveAction.YOU_DED) {
-			this.closedBecauseOfDeath = true;
-			this.game.updater.you_ded(data);
-		}
-		if (data[0] == receiveAction.MINIMAP) {
-			this.game.updater.minimap(data);
-		}
-		if (data[0] == receiveAction.PLAYER_SKIN) {
-			const id = bytesToInt(data[1], data[2]);
-			this.game.updater.player_skin(id,data[3]);
-		}
-		if (data[0] == receiveAction.READY) {
-			this.game.updater.ready();
-		}
-		if (data[0] == receiveAction.PLAYER_HIT_LINE) {
-			const id = bytesToInt(data[1], data[2]);
-			const pointsColor = getColorForBlockSkinId(data[3]);
-			const x = bytesToInt(data[4], data[5]);
-			const y = bytesToInt(data[6], data[7]);
-			const hitSelf = data.length > 8 && data[8] == 1;
-			this.game.updater.player_hit_line(id,pointsColor,x,y,hitSelf);
-		}
-		if (data[0] == receiveAction.REFRESH_AFTER_DIE) {
-			doRefreshAfterDie = true;
-		}
-		if (data[0] == receiveAction.PLAYER_HONK) {
-			const id = bytesToInt(data[1], data[2]);
-			const time = data[3];
-			this.game.updater.player_honk(id,time);
-		}
-		if (data[0] == receiveAction.PONG) {
-			const ping = Date.now() - this.lastPingTime;
-			const thisDiff = Math.abs(ping - this.serverLastPing);
-			this.serverDiffPing = Math.max(this.serverDiffPing, thisDiff);
-			this.serverDiffPing = lerp(thisDiff, this.serverDiffPing, 0.5);
-			this.serverAvgPing = lerp(this.serverAvgPing, ping, 0.5);
-			this.serverLastPing = ping;
-			this.lastPingTime = Date.now();
-			this.waitingForPing = false;
-		}
-		if (data[0] == receiveAction.UNDO_PLAYER_DIE) {
-			const id = bytesToInt(data[1], data[2]);
-			this.game.updater.player_undo_die(id);
-		}
-		if (data[0] == receiveAction.TEAM_LIFE_COUNT) {
-			const currentLives = data[1];
-			const totalLives = data[2];
-			this.game.updater.life_count(currentLives,totalLives);
-		}
-	}
-	//#endregion
-}
-
-class RegisteredConnection {
-	constructor(url,game){
-		this.recording=url
-		this.data=undefined;
-		this.game = game;
-		this.starting_time = performance.now();
-		this.offset = null;
-		this.progress = undefined;
-
-		//dummies
-		this.isRequestingMyTrail = false;
-		this.trailPushesDuringRequest = [];
-		this.lastChangedDirPos = [0,0];
-		this.lastClientsideMoves = [];
-		this.sendDirQueue = [];
-		this.serverAvgPing = 0;
-		this.serverDiffPing = 0;
-		this.serverLastPing = 0;
-		
-		console.log('Starting Replay');
-		window.requestAnimationFrame(this.fake.bind(this));
-
-	}
-
-	fake(timeStamp){
-		if(this.data){
-			console.log("Using data", this.data);
-			if(this.data.time-this.offset<timeStamp-this.starting_time){
-				console.log(this.data.call);
-				this.game.updater[this.data.call](...this.data.args);
-				this.data=undefined;
-				this.progress+=1;
-			} else {
-				console.log(this.data.time-this.offset,timeStamp-this.starting_time);
-			}
-			window.requestAnimationFrame(this.fake.bind(this));
-		} else {
-			console.log("Requesting next data",this.progress);
-			let listing_store = db.transaction(["recording_data"],"readonly").objectStore('recording_data');
-			const req = listing_store.index("recording").openCursor(this.recording);
-			req.onsuccess = e => {
-				const cursor = e.target.result;
-				if(cursor){
-					const data = cursor.value;
-					if(this.offset === null){
-						this.offset = data.time;
-					} else if(this.progress > cursor.primaryKey){
-						cursor.continuePrimaryKey(this.recording,this.progress);
-						return
-					}
-					this.data=data;
-					this.progress = cursor.primaryKey;
-					window.requestAnimationFrame(this.fake.bind(this));
-				} else {
-					console.log("finished");
-				}
-			}
-		}
-	}
-
-	onClose(){
-		if (!playingAndReady) {
-			if (!isTransitioning) {
-				if (couldntConnect()) {
-					showBeginHideMainCanvas();
-				}
-			} else {
-				showCouldntConnectAfterTransition = true;
-			}
-		}
-		this.ws = null;
-		this.isConnecting = false;
-	}
-
-	sendDir(...args){}
-	wsSendMsg(...args){}
-	wsSendMsg(...args){}
-	render(...args){}
-	startRequestMyTrail(...args){}
-
-}
-
 function doConnect() {
 	if (!one_game && !isTransitioning) {
 		const server = getSelectedServer();
@@ -5444,7 +4942,7 @@ function doConnect() {
 			one_game = new OneGame(server,game_state);
 		}
 		one_game.addEventListener('update_my_rank', ev => {
-			left_stats.rank_update(ev.detail.rank,ev.detail.total)
+			left_stats.rank_update(ev.detail.rank,ev.detail.total_players)
 		});
 		one_game.addEventListener('update_my_score', ev => {
 			left_stats.score_update(ev.detail.blocks,ev.detail.kills);
@@ -5455,10 +4953,10 @@ function doConnect() {
 
 //basically like refreshing the page
 function resetAll() {
-	if (!!one_game && !!one_game.connection.ws && one_game.connection.ws.readyState == WebSocket.OPEN) {
-		one_game.connection.ws.close();
-	}
-	logger??=one_game.listing;
+	connection_worker.postMessage({
+		request: "close_connection",
+	});
+	//logger??=one_game.listing;
 	one_game = null;
 	game_state.reset();
 	main_canvas.reset();

@@ -970,7 +970,11 @@ function wcSendMsgHonk() {
     if (playingAndReady) {
         var code = wcMessage.charCodeAt(wcMessagePos) + 70;
         wcMessagePos += 1;
-        if (!game_connection.wsSendMsg(sendAction.HONK, code)) wsMsgSendStatus = 0;
+        connection_worker.postMessage({
+            call: "wsSendMsg",
+            args: [sendAction.HONK, code]
+        });
+        if (!true) wsMsgSendStatus = 0; // TODO fix error handling
         game_state.my_player.doHonk(code);
         if (wcMessagePos < wcMessage.length) {
             setTimeout(wcSendMsgHonk, ((wcMessagePos < 13e0) ? 50e0 : ((wcMessagePos < 26e0) ? 65e0 : 85e0)));
