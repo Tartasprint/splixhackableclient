@@ -67,7 +67,10 @@ async function initServerSelection() {
 
 	if (officialGroup.childElementCount > 0) serverSelectEl.appendChild(officialGroup);
 	if (unofficialGroup.childElementCount > 0) serverSelectEl.appendChild(unofficialGroup);
-
+	const replayGroup = document.createElement("optgroup");
+	replayGroup.id = "replayGroup";
+	replayGroup.label = "Replay";
+	serverSelectEl.append(replayGroup);
 	serverSelectEl.selectedIndex = selectedEndpoint.index;
 
 	serverSelectEl.disabled = false;

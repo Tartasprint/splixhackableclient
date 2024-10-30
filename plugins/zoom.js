@@ -40,7 +40,7 @@ if(window.hc.km!==undefined){
         short: "Zoom initial",
         down: zoom_initial,
     });
-    window.hc.km.add_shortcut('KeyQ','zoom_in');
-    window.hc.km.add_shortcut('KeyW','zoom_initial');
-    window.hc.km.add_shortcut('KeyE','zoom_out');
+    window.hc.km.add_default_shortcut('KeyQ','zoom_in','playing');
+    window.hc.km.add_default_shortcut('KeyW','zoom_initial','playing');
+    window.hc.km.add_default_shortcut('KeyE','zoom_out','playing');
 }

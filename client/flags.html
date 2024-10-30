@@ -5,6 +5,15 @@
     <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
     <meta content="utf-8" http-equiv="encoding">
     <link rel="canonical" href="http://splix.io/flags"/>
+    <script>
+      ;
+      document.addEventListener('readystatechange', ev => {
+        console.log('Loaded',ev);
+      });
+      document.addEventListener('DOMContentLoaded', () => {
+        console.log('DOM Loaded');
+      });
+    </script>
     <style type="text/css">
       html{
         font-family: Arial, Helvetica, sans-serif;

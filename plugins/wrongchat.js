@@ -85,55 +85,12 @@ var wcFlagList = [
         "present": flagTalkers.JSON.from,
     },
 ];
-for( const flag of wcFlagList){
-    window.hc.flags.addFlag(flag);
-}
-if (window.location.pathname == "/client/flags.html") {
-    (function wcFlagListAddControls() {
-        addHTML('<h4 style="margin-top: 1.5em; margin-bottom: 1em">Wrong Chat Flags</h4>', 'body');
-        for (var i = 0; i < wcFlagList.length; i++) {
-            var flag = wcFlagList[i];
-            var control = `<label>${flag.caption}\\t${flag.name == "wcBlockedPlayers" ? "<br><textarea" : "<input"} name="${flag.name}" type="${flag.type}" ${(flag.type == "number") ?
-                (' style="width: 50px"' + (('min' in flag) ? ' min="' + flag.min + '"' : " ") + (('max' in flag) ? ' max="' + flag.max + '"' : " ") + ' value="' + wcFlags[flag.name] + '"') :
-                (flag.type == "text" ? (' style="width: 600px; height: 50px"') :
-                    ((flag.type == "checkbox" && wcFlags[flag.name]) ? " checked" : ""))}>${flag.name == "wcBlockedPlayers" ? "</textarea>" : ""}</label>
-            <div class="st">${flag.description}</div>`;
- 
-            addHTML(control, "body");
- 
-            if (flag.name == "wcBlockedPlayers") {
-                document.querySelector('textarea[name="wcBlockedPlayers"]').value = JSON.stringify(wcFlags[flag.name]);
-            }
- 
-            document.querySelector("label:last-of-type input, label:last-of-type textarea").addEventListener("change", function (e) {
-                if (e.target.type == "number") {
-                    if (!Number.isNaN(e.target.valueAsNumber)) {
-                        localStorage.setItem(e.target.name, e.target.value);
-                        wcFlags[e.target.name] = e.target.valueAsNumber;
-                    }
-                }
-                else if (e.target.type == "checkbox") {
-                    localStorage.setItem(e.target.name, e.target.checked);
-                    wcFlags[e.target.name] = e.target.checked;
-                }
-                else if (e.target.tagName == "TEXTAREA") {
-                    try {
-                        if (e.target.value.trim() === "") {
-                            localStorage.setItem("wcBlockedPlayers", "{}");
-                        }
-                        else {
-                            var obj = JSON.parse(e.target.value);
-                            localStorage.setItem("wcBlockedPlayers", JSON.stringify(obj));
-                        }
-                        wcLoadBlockedPlayers(false);
-                    }
-                    catch { }
-                }
-            });
-        }
-    }());
-    throw new Error("Nobody will read the text of this error"); /** Stop code execution from here */
-}
+window.hc.hooks.after('hc.flags',()=>{
+    for(const flag of wcFlagList){
+        window.hc.flags.addFlag(flag);
+    }
+});
+
  
 var dict = ["especially", "understand", "everything", "themselves", "associated", "experience", "something", "sometimes", "different", "necessary", "important", "condition", "operation", "direction", "attention", "therefore", "character", "situation", "according", "questions", "described", "territory", "establish", "https://", "immortal", "parasite", "anything", "actually", "happened", "national", "question", "possible", "although", "probably", "business", "pressure", "together", "couldn't", "remember", "southern", "frequent", "interest", "children", "everyone", "continue", "whatever", "position", "features", "wouldn't", "movement", "declared", "complete", "presence", "consider", "appeared", "industry", "thousand", "thinking", "language", "majority", "consists", "distance", "involved", "yourself", "entirely", "increase", "standing", "property", "surround", "private", "browser", "careful", "connect", "discord", "http://", "latency", "message", "players", "protect", "refresh", "restart", "running", "through", "because", "against", "thought", "without", "between", "nothing", "another", "usually", "however", "country", "himself", "patient", "certain", "general", "brother", "already", "someone", "example", "finally", "surface", "believe", "brought", "doesn't", "several", "english", "perhaps", "becomes", "process", "present", "looking", "there's", "carried", "friends", "minutes", "they're", "applied", "whether", "morning", "control", "explain", "measure", "foreign", "hundred", "talking", "instead", "outside", "reached", "opinion", "removed", "fingers", "project", "forward", "similar", "primary", "further", "getting", "quickly", "changes", "towards", "opening", "natural", "account", "comment", "strange", "subject", "prevent", "serious", "special", "portion", "somehow", "decided", "western", "problem", "imagine", "growing", "clearly", "beneath", "college", "exactly", "feeling", "divided", "section", "contact", "parents", "despite", "support", "healing", "neither", "attack", "better", "blocks", "bottom", "coming", "fought", "inside", "killed", "leader", "played", "player", "script", "server", "square", "should", "before", "people", "little", "didn't", "around", "really", "though", "that's", "things", "enough", "course", "always", "almost", "during", "you're", "within", "become", "behind", "matter", "others", "either", "school", "second", "friend", "system", "having", "wasn't", "public", "common", "across", "number", "moment", "passed", "person", "follow", "itself", "pretty", "making", "stupid", "growth", "result", "myself", "reason", "became", "rather", "trying", "thread", "father", "figure", "beyond", "french", "master", "family", "saying", "months", "action", "nearly", "middle", "taking", "period", "affect", "anyone", "rights", "single", "nature", "longer", "ground", "toward", "twenty", "spread", "raised", "indeed", "window", "except", "cancer", "street", "answer", "muscle", "effect", "slowly", "severe", "change", "cannot", "strong", "europe", "office", "normal", "spirit", "mother", "living", "likely", "liable", "german", "closed", "entire", "employ", "occurs", "reddit", "caught", "unless", "sudden", "please", "happen", "sounds", "simple", "nation", "filled", "points", "placed", "source", "region", "hardly", "silver", "seeing", "easily", "giving", "chance", "amount", "method", "direct", "appear", "remain", "barely", "remark", "finger", "return", "broken", "manner", "anyway", "crash", "block", "board", "chase", "fight", "later", "loose", "north", "paint", "right", "south", "speak", "splix", "spoke", "start", "worst", "esque", "cracy", "cycle", "which", "there", "their", "would", "could", "other", "about", "after", "first", "those", "these", "still", "think", "don't", "where", "being", "under", "great", "years", "while", "never", "every", "state", "again", "place", "blood", "might", "house", "shall", "until", "found", "three", "thing", "small", "power", "night", "heard", "cases", "maybe", "whole", "least", "light", "asked", "point", "world", "large", "going", "often", "can't", "known", "hands", "labor", "party", "along", "nerve", "among", "treat", "parts", "wound", "cause", "black", "taken", "money", "given", "women", "since", "above", "means", "close", "young", "times", "tried", "voice", "forms", "white", "woman", "sense", "early", "hours", "human", "death", "trade", "bones", "leave", "class", "quite", "doing", "sound", "stood", "began", "front", "wrong", "words", "local", "alone", "force", "water", "short", "takes", "mouth", "civil", "order", "occur", "peace", "paper", "lower", "clear", "heart", "terms", "doubt", "brain", "makes", "we're", "isn't", "popul", "round", "bring", "third", "cells", "meant", "child", "moved", "sorry", "sleep", "below", "floor", "watch", "seems", "whose", "earth", "heavy", "guess", "field", "sight", "upper", "issue", "lines", "weeks", "polic", "cover", "eight", "court", "lived", "stuff", "level", "space", "table", "thank", "works", "rapid", "teach", "event", "mini", "nope", "afai", "ahah", "area", "asap", "best", "chat", "died", "draw", "drew", "east", "fake", "good", "haha", "head", "imho", "keep", "kill", "left", "lmao", "mass", "near", "noob", "ping", "play", "rofl", "semi", "side", "tail", "talk", "tell", "wall", "west", "yolo", "ance", "ence", "ible", "ical", "ious", "ment", "ness", "ship", "sion", "tion", "ways", "ette", "hood", "ward", "wise", "that", "inte", "comp", "cons", "cont", "with", "from", "comm", "this", "they", "have", "disc", "tran", "were", "when", "conf", "what", "been", "into", "conc", "more", "like", "just", "conv", "unde", "dist", "them", "reco", "some", "then", "time", "your", "only", "said", "even", "than", "coun", "over", "disp", "prop", "pres", "know", "supe", "upon", "such", "back", "spec", "prot", "fore", "char", "very", "down", "made", "para", "well", "it's", "disa", "will", "most", "also", "much", "long", "same", "part", "must", "here", "make", "many", "skin", "came", "away", "hand", "ight", "once", "come", "room", "take", "face", "work", "both", "bone", "high", "last", "look", "eyes", "each", "life", "went", "knew", "ever", "took", "call", "body", "case", "give", "days", "seen", "turn", "door", "told", "name", "used", "free", "does", "year", "less", "find", "half", "mind", "felt", "i've", "seem", "next", "four", "pain", "girl", "fact", "else", "land", "done", "dark", "soon", "home", "sure", "five", "shit", "mean", "want", "kind", "gave", "stor", "need", "feel", "read", "deep", "real", "help", "able", "dead", "hard", "held", "rest", "line", "gone", "show", "rise", "fuck", "kept", "size", "true", "past", "thus", "idea", "limb", "full", "yeah", "arms", "hear", "love", "i'll", "city", "lost", "dumb", "he's", "late", "king", "farm", "form", "cold", "open", "word", "post", "neck", "term", "soft", "sent", "hope", "self", "laid", "fire", "hair", "lead", "feet", "stop", "view", "live", "none", "fear", "care", "mark", "foot", "hold", "hour", "game", "miss", "vote", "seat", "wait", "cute", "army", "easy", "step", "grew", "main", "join", "save", "move", "hunt", "says", "loss", "whom", "fell", "meat", "wish", "ones", "pass", "gold", "fine", "town", "edge", "food", "serv", "rule", "deal", "type", "ends", "we'd", "bill", "tha", "tio", "nde", "nce", "edt", "tis", "oft", "sth", "boy", "con", "yep", "afk", "aka", "art", "bad", "brb", "cya", "d/c", "die", "dot", "faq", "fyi", "gr8", "hit", "idk", "ikr", "kek", "lag", "lmc", "lol", "net", "omg", "out", "pen", "say", "sup", "thx", "top", "wtf", "'ll", "'ve", "acy", "ate", "dom", "ely", "ent", "ess", "ful", "ify", "ing", "ise", "ish", "ism", "ist", "ity", "ive", "ize", "ked", "ous", "ted", "ant", "ary", "eer", "est", "ion", "ure", "pre", "dis", "the", "pro", "com", "and", "int", "tra", "per", "sta", "res", "gra", "str", "imp", "par", "rec", "was", "cha", "ins", "sub", "exp", "ove", "you", "inc", "rep", "for", "cor", "inf", "ind", "app", "had", "mar", "his", "ste", "not", "but", "rea", "col", "und", "cla", "cou", "pla", "mis", "ass", "acc", "che", "sha", "are", "dec", "sho", "des", "spe", "tri", "har", "bra", "chi", "all", "hea", "one", "ref", "pri", "rel", "cra", "bri", "ret", "mon", "her", "bar", "she", "cre", "def", "blo", "inv", "fla", "sca", "fre", "cal", "exc", "may", "shi", "sto", "whi", "tre", "him", "wor", "han", "spi", "bla", "spo", "att", "sur", "fra", "min", "gen", "dep", "bre", "rem", "pat", "mor", "thr", "who", "rev", "ext", "pur", "its", "unc", "scr", "bur", "ser", "bal", "uns", "thi", "pos", "ele", "sen", "reg", "any", "pol", "did", "del", "mal", "sti", "has", "sch", "lea", "cat", "spa", "stu", "win", "can", "bea", "bac", "squ", "fac", "bro", "new", "now", "mas", "adv", "cri", "cap", "mat", "cur", "ver", "how", "det", "fin", "dev", "see", "emp", "our", "clo", "sec", "two", "gro", "aut", "hor", "mil", "sol", "ter", "syn", "way", "i'm", "get", "man", "too", "map", "own", "off", "war", "why", "old", "got", "uni", "saw", "few", "day", "far", "men", "met", "let", "end", "yet", "use", "put", "yes", "act", "law", "fig", "set", "i'd", "due", "cut", "son", "bed", "red", "lot", "air", "god", "arm", "ran", "guy", "ten", "try", "add", "lay", "ask", "six", "big", "ago", "eye", "sir", "age", "bit", "run", "nor", "mom", "led", "ect", "sat", "kid", "dad", "ies", "pay", "car", "hot", "low", "fix", "ics", "iel", "iar", "ian", "re", "en", "nt", "ea", "ti", "io", "le", "ou", "ar", "de", "rt", "ve", "am", "go", "of", "in", "he", "to", "it", "an", "is", "on", "at", "as", "or", "be", "me", "ha", "by", "no", "so", "we", "hi", "my", "us", "if", "do", "up", "ur", "ed", "yo", "dr", "ah", "oh", "ok", "al", "ic", "er", "nd", "es", "st", "th", "ly", "fy"]
  
@@ -975,7 +932,7 @@ function wcSendMsgHonk() {
             args: [sendAction.HONK, code]
         });
         if (!true) wsMsgSendStatus = 0; // TODO fix error handling
-        game_state.my_player.doHonk(code);
+        //game_state.my_player.doHonk(code);
         if (wcMessagePos < wcMessage.length) {
             setTimeout(wcSendMsgHonk, ((wcMessagePos < 13e0) ? 50e0 : ((wcMessagePos < 26e0) ? 65e0 : 85e0)));
         }

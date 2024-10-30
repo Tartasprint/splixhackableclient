@@ -161,13 +161,19 @@ class FlagEditor {
             list: document.createElement('ul'),
         }
         this.ui.container.append(this.ui.searchbar,this.ui.list);
+        this.ui.container.addEventListener('click', event =>{
+            const rect = this.ui.container.getBoundingClientRect();
+            if(rect.left > event.clientX || event.clientX > rect.right || rect.top > event.clientY || event.clientY > rect.bottom){
+                // Clicked outside of the menu
+                this.hideUI();
+            }
+        });
         this.searchbox = new SearchBox(this.ui.searchbar,this.ui.list);
         this.ui.searchbar.classList.add('hc-flags-searchbar');
         this.ui.searchbar.placeholder = "Search a flag";
         this.ui.container.classList.add('hc-flags-container','hc-menu-container');
         this.ui.container.addEventListener('close', ()=>{
-            hc.km.enable();
-            this.__visible=false;
+            this.hideUI(true);
         });
         this.ui.list.classList.add('hc-flags-list');
         this.hideUI();
@@ -213,13 +219,21 @@ class FlagEditor {
     
     showUI(){
         this.__visible = true;
+        window.hc.km.hideUI();
+        if(window.hc.km?.active_scopes.has("playing")){
+            window.hc.km.active_scopes.add("menuplaying");
+            window.hc.km.active_scopes.delete("playing");
+        }
         this.ui.container.showModal();
-        hc.km.disable();
     }
 
-    hideUI(){
-        this.__visible = false;
-        this.ui.container.close();
+    hideUI(no_close){
+        if(!no_close) this.ui.container.close();
+        this.__visible=false;
+        if(window.hc.km?.active_scopes.has("menuplaying")){
+            window.hc.km.active_scopes.add("playing");
+            window.hc.km.active_scopes.delete("menuplaying");
+        }
     }
 
     on_change(flag_name, callback){
@@ -236,97 +250,111 @@ class FlagEditor {
 
 
 window.hc.flags = new FlagEditor();
+window.hc.hooks.fire('hc.flags',[]);
+
+const flags = [
+    {
+        "name": "drawDebug",
+        "caption": "Display ping",
+        "description": "Displays a tiny red number in the bottom right corner while playing.<br>This is your ping (amount of ms delay with the server)<br>Anything below 100 should be good",
+        "keywords" : ["display", "ping", "red", "number" ,"delay", "latency"],
+        "type": "checkbox",
+        "default": "false"
+    },
+    {
+        "name": "dontCapFps",
+        "caption": "Dont cap fps",
+        "description": "To keep the frame rate stable, it is automatically locked to 144, 60, 30, 20 or 10fps, depending on how fast your computer is. If you check this box it doesn't lock the framerate.<br>This causes a higher framerate but it feels more like the game is stuttering.",
+        "keywords": ["cap","fps","frame","frames","per","second","framerate","rate","stuttering"],
+        "type": "checkbox",
+        "default": "false"
+    },
+    {
+        "name": "drawActualPlayerPos",
+        "caption": "Show actual player pos",
+        "description": "To make the game feel less laggy, the place where your player is drawn is not its actual position. If you check this checkbox the game will draw a second dot on the position where the server thinks you actually are.",
+        "keywords": ["draw","show", "actual", "player", "lag", "real", "dot", "server","position"],
+        "type": "checkbox",
+        "default": "false"
+    },
+    {
+        "name": "drawWhiteDot",
+        "caption": "Draw a white dot on my player",
+        "description": "Useful for tracking the player position when making youtube videos.",
+        "keywords": ["draw","white","dot","player","tracking","position","video"],
+        "type": "checkbox",
+        "default": "false"
+    },
+    {
+        "name": "dontSlowPlayersDown",
+        "caption": "Don't slow down the player with high ping",
+        "description": "When you're running too far ahead according to the server, it starts slowing you down to make up for it. This makes sure that your land gets filled once you reach it, instead of a couple of blocks later. The downside is that your player is slower compared to the other players. To prevent this, check this box. But be warned: Your blocks will be filled with a short delay and players are able to kill you in that short time.",
+        "type": "checkbox",
+        "keywords": ["dont","slow","down","player","high","ping","server","slowing"],
+        "default": "false"
+    },
+    {
+        "name": "hidePlayerNames",
+        "caption": "Hide player names",
+        "description": "Hides the name above players.",
+        "keywords": ["hide","name","player","nickname","show"],
+        "type": "checkbox",
+        "default": "false"
+    },
+    {
+        "name": "uglyMode",
+        "caption": "Ugly mode",
+        "description": "In case your fps is too low. Warning! Makes the game ugly. (This is subjective).",
+        "keywords": ["ugly","mode","fps","frame","per","second"],
+        "type": "checkbox",
+        "default": "false"
+    },
+    {
+        "name": "leaderboardHidden",
+        "caption": "Hide the leaderboard",
+        "description": "Hides the leaderboard when playing.",
+        "keywords": ["hide","show","leaderboard"],
+        "type": "checkbox",
+        "default": "false"
+    },
+    {
+        "name": "simulatedLatency",
+        "caption": "Simulate latency",
+        "description": "This increases the lag, there's absolutely no reason why you would want to enable this unless you're debugging stuff. This is also makes things very unstable so you might want to avoid using it.<br>Set this to 0 to disable it.",
+        "keywords": ["simulate","latency","lag","debugging"],
+        "type": "number",
+        "default": "0"
+    },
+    {
+        "name": "menuOpacity",
+        "caption": "Menu opacity while playing",
+        "description": "To not miss anything in the game while you open a menu, you can make it translucent.",
+        "keywords": ["menu","opacity","translucent","transparent"],
+        "type": "number",
+        "default": "0.7",
+        "min": "0",
+        "max": "1",
+        "step": "0.1",
+        "decimal": true,
+    },
+]
+
+for(const flag of flags){
+    window.hc.flags.addFlag(flag);
+};
+
+window.hc.hooks.after('hc.km',()=>{
+    window.hc.km.add_action({
+        name: "menu_flags_toggle",
+        short: "Open/Close flags menu",
+        down: ()=>{ window.hc.flags.toggleUI()},
+    });
+    window.hc.km.add_default_shortcut('Digit2','menu_flags_toggle','always');
+    window.hc.km.add_default_shortcut('KeyO','flags_toggleFlag_leaderboardHidden','playing');
+})
+
 
 document.addEventListener('DOMContentLoaded',()=>{
-    const flags = [
-        {
-            "name": "drawDebug",
-            "caption": "Display ping",
-            "description": "Displays a tiny red number in the bottom right corner while playing.<br>This is your ping (amount of ms delay with the server)<br>Anything below 100 should be good",
-            "keywords" : ["display", "ping", "red", "number" ,"delay", "latency"],
-            "type": "checkbox",
-            "default": "false"
-        },
-        {
-            "name": "dontCapFps",
-            "caption": "Dont cap fps",
-            "description": "To keep the frame rate stable, it is automatically locked to 144, 60, 30, 20 or 10fps, depending on how fast your computer is. If you check this box it doesn't lock the framerate.<br>This causes a higher framerate but it feels more like the game is stuttering.",
-            "keywords": ["cap","fps","frame","frames","per","second","framerate","rate","stuttering"],
-            "type": "checkbox",
-            "default": "false"
-        },
-        {
-            "name": "drawActualPlayerPos",
-            "caption": "Show actual player pos",
-            "description": "To make the game feel less laggy, the place where your player is drawn is not its actual position. If you check this checkbox the game will draw a second dot on the position where the server thinks you actually are.",
-            "keywords": ["draw","show", "actual", "player", "lag", "real", "dot", "server","position"],
-            "type": "checkbox",
-            "default": "false"
-        },
-        {
-            "name": "drawWhiteDot",
-            "caption": "Draw a white dot on my player",
-            "description": "Useful for tracking the player position when making youtube videos.",
-            "keywords": ["draw","white","dot","player","tracking","position","video"],
-            "type": "checkbox",
-            "default": "false"
-        },
-        {
-            "name": "dontSlowPlayersDown",
-            "caption": "Don't slow down the player with high ping",
-            "description": "When you're running too far ahead according to the server, it starts slowing you down to make up for it. This makes sure that your land gets filled once you reach it, instead of a couple of blocks later. The downside is that your player is slower compared to the other players. To prevent this, check this box. But be warned: Your blocks will be filled with a short delay and players are able to kill you in that short time.",
-            "type": "checkbox",
-            "keywords": ["dont","slow","down","player","high","ping","server","slowing"],
-            "default": "false"
-        },
-        {
-            "name": "hidePlayerNames",
-            "caption": "Hide player names",
-            "description": "Hides the name above players.",
-            "keywords": ["hide","name","player","nickname","show"],
-            "type": "checkbox",
-            "default": "false"
-        },
-        {
-            "name": "uglyMode",
-            "caption": "Ugly mode",
-            "description": "In case your fps is too low. Warning! Makes the game ugly. (This is subjective).",
-            "keywords": ["ugly","mode","fps","frame","per","second"],
-            "type": "checkbox",
-            "default": "false"
-        },
-        {
-            "name": "leaderboardHidden",
-            "caption": "Hide the leaderboard",
-            "description": "Hides the leaderboard when playing.",
-            "keywords": ["hide","show","leaderboard"],
-            "type": "checkbox",
-            "default": "false"
-        },
-        {
-            "name": "simulatedLatency",
-            "caption": "Simulate latency",
-            "description": "This increases the lag, there's absolutely no reason why you would want to enable this unless you're debugging stuff. This is also makes things very unstable so you might want to avoid using it.<br>Set this to 0 to disable it.",
-            "keywords": ["simulate","latency","lag","debugging"],
-            "type": "number",
-            "default": "0"
-        },
-        {
-            "name": "menuOpacity",
-            "caption": "Menu opacity while playing",
-            "description": "To not miss anything in the game while you open a menu, you can make it translucent.",
-            "keywords": ["menu","opacity","translucent","transparent"],
-            "type": "number",
-            "default": "0.7",
-            "min": "0",
-            "max": "1",
-            "step": "0.1",
-            "decimal": true,
-        },
-    ]
-    for(const flag of flags){
-        window.hc.flags.addFlag(flag);
-    };
     document.body.append(window.hc.flags.ui.container);
     colorBox(window.hc.flags.ui.container,'grey','black');
     addStyle(`
@@ -349,13 +377,6 @@ document.addEventListener('DOMContentLoaded',()=>{
             border-radius: 100vh;
         }
     `)
-    window.hc.km.add_action({
-        name: "menu_flags_toggle",
-        short: "Open/Close flags menu",
-        down: ()=>{ window.hc.flags.toggleUI()},
-    });
-    window.hc.km.add_shortcut('F2','menu_flags_toggle');
-    window.hc.km.add_shortcut('KeyO','flags_toggleFlag_leaderboardHidden');
     window.hc.flags.on_change("uglyMode", value => {
         window.uglyMode=value;
         window.uglyText.innerHTML = "Ugly mode: " + (value ? "on" : "off");

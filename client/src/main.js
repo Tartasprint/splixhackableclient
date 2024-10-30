@@ -3818,6 +3818,7 @@ class OneGame extends EventTarget {
 		if(!fake){
 			let listing_store = db.transaction(["recording_listing"],"readwrite").objectStore('recording_listing');
 			listing_store.add({time: Date.now()}).onsuccess = ev => {
+				this.listing = ev.target.result;
 				connection_worker.postMessage({
 						request: "start_connection",
 						args: {
@@ -3873,7 +3874,6 @@ class OneGame extends EventTarget {
 			call: "wsSendMsg",
 			args: [sendAction.HONK, time],
 		})
-		this.#state.my_player?.doHonk(Math.max(70, time));
 	}
 
 	update(deltaTime){
@@ -4342,6 +4342,7 @@ class OneGame extends EventTarget {
 	update_onopen(){
 		countPlayGame();
 		document.body.dataset.state="playing";
+		window.hc.km.enable_scope("playing");
 		if (playingAndReady) {
 			onConnectOrMiddleOfTransition();
 		}
@@ -4936,10 +4937,10 @@ function doConnect() {
 			onClose();
 			return false;
 		}
-		if(logger !== null ){
-			one_game = new OneGame(logger,game_state,true);
-		}else{
+		if(Number.isNaN(Number.parseInt(server))){
 			one_game = new OneGame(server,game_state);
+		}else{
+			one_game = new OneGame(Number.parseInt(server),game_state,true);
 		}
 		one_game.addEventListener('update_my_rank', ev => {
 			left_stats.rank_update(ev.detail.rank,ev.detail.total_players)
@@ -4956,7 +4957,12 @@ function resetAll() {
 	connection_worker.postMessage({
 		request: "close_connection",
 	});
-	//logger??=one_game.listing;
+	if(one_game.listing){
+		const option = document.createElement('option');
+		option.value = one_game.listing;
+		option.text = "Replay #" + one_game.listing;
+		document.getElementById("replayGroup").append(option);
+	}
 	one_game = null;
 	game_state.reset();
 	main_canvas.reset();

@@ -713,6 +713,10 @@ class GameConnection {
 			}
 			else if (action == sendAction.HONK) {
 				array.push(data);
+				this.post({
+					call: "player_honk",
+					args: [0,data],
+				});
 			}
 			else if (action == sendAction.MY_TEAM_URL) {
 				utf8Array = toUTF8Array(data);
