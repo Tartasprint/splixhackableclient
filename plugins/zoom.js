@@ -1,5 +1,5 @@
 function isInGame() {
-    return beginScreen.getAttribute("style")?.includes("display: none") && hc.km.active;
+    return beginScreen.getAttribute("style")?.includes("display: none") && window.hc.km.active_scopes.add("menuplaying");
 }
 
 document.addEventListener("wheel", (e)=>{
