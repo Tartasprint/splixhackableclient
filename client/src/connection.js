@@ -439,12 +439,21 @@ class GameConnection {
         self.postMessage(data);
         if(this.replay !== "recording") return;
         if(!data.call) return;
-        db.transaction(["recording_data"], "readwrite").objectStore("recording_data").add({
-            time: performance.now(),
-            recording: this.recording,
-            call: data.call,
-            args: data.args,
-        });
+		if(data.call === "player_honk"){
+			db.transaction(["recording_data"], "readwrite").objectStore("recording_data").add({
+				time: performance.now(),
+				recording: this.recording,
+				call: data.call,
+				args: [data.args[0],Math.round(data.args[1]/20)*20],
+			});
+		} else {
+			db.transaction(["recording_data"], "readwrite").objectStore("recording_data").add({
+				time: performance.now(),
+				recording: this.recording,
+				call: data.call,
+				args: data.args,
+			});
+		}
     }
 
 	//#region Server communication
