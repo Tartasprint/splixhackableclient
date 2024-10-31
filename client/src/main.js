@@ -2796,7 +2796,7 @@ class LeftStats {
 	 * @param {HTMLElement} rank 
 	 * @param {HTMLElement} total 
 	 */
-	constructor(blocks, kills, score, rank, total){
+	constructor(kills, blocks, score, rank, total){
 		this.ui = {
 			blocks,
 			kills,
@@ -2823,7 +2823,7 @@ class LeftStats {
 		this.ui.total.innerText = total;
 	}
 
-	score_update(blocks,kills){
+	score_update(kills,blocks){
 		this.blocks_target = blocks;
 		this.score_target = blocks + kills * 500;
 		this.ui.kills.innerText = kills;
@@ -3013,6 +3013,7 @@ class InputHanlder {
 			time = iLerp(0, 1000, time);
 			time *= 255;
 			time = Math.floor(time);
+			time = Math.max(time,70);
 			one_game.honk(time);
 		}
 	}
@@ -4290,10 +4291,10 @@ class OneGame extends EventTarget {
 		}
 	}
 
-	update_my_score(blocks,kills){
+	update_my_score(kills,blocks){
 		this.dispatchEvent(new CustomEvent('update_my_score',{detail: {
-			blocks,
 			kills,
+			blocks,
 		}}));
 	}
 
@@ -4761,9 +4762,9 @@ window.addEventListener('load', function () {
 	quality_ui = new QualityUI(document.getElementById("qualityText"));
 	ugly_ui = new UglyUI(document.getElementById("uglyText"));
 	left_stats = new LeftStats(
+		document.getElementById("myKills"),
 		document.getElementById("blockCaptureCount"),
 		document.getElementById("score"),
-		document.getElementById("myKills"),
 		document.getElementById("myRank"),
 		document.getElementById("totalPlayers"),
 	);
@@ -4934,7 +4935,7 @@ function doConnect() {
 	if (!one_game && !isTransitioning) {
 		const server = getSelectedServer();
 		if (!server) {
-			onClose();
+			onClose(); // TODO  onClose does not exist
 			return false;
 		}
 		if(Number.isNaN(Number.parseInt(server))){
@@ -4946,8 +4947,9 @@ function doConnect() {
 			left_stats.rank_update(ev.detail.rank,ev.detail.total_players)
 		});
 		one_game.addEventListener('update_my_score', ev => {
-			left_stats.score_update(ev.detail.blocks,ev.detail.kills);
-		})
+			left_stats.score_update(ev.detail.kills,ev.detail.blocks);
+		});
+		return true;
 	}
 	return false;
 }

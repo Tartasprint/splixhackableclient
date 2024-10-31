@@ -366,7 +366,7 @@ class Shortcut {
 }
 
 window.hc.km = new KeyboardManager();
-window.hc.km.add_scope('playing','When playing.')
+window.hc.km.add_scope('playing','When playing')
 window.hc.km.add_scope('always','Always')
 window.hc.hooks.fire('hc.km',[]);
 window.hc.km.add_action({

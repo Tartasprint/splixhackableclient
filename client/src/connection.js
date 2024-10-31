@@ -910,7 +910,7 @@ class GameConnection {
 			const kills = data.length > 5 ? bytesToInt(data[5], data[6]) : 0;
 			this.post({
                 call: "my_score",
-                args: [blocks,kills],
+                args: [kills,blocks],
             });;
 		}
 		if (data[0] == receiveAction.MY_RANK) {
