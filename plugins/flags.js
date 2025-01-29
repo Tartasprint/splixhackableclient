@@ -382,8 +382,7 @@ document.addEventListener('DOMContentLoaded',()=>{
         window.uglyText.innerHTML = "Ugly mode: " + (value ? "on" : "off");
     });
     window.hc.flags.on_change("leaderboardHidden", value => {
-        leaderboardHidden=value;
-        setLeaderboardVisibility();
+        leaderboard_ui.set_visibility(value);
     });
     window.hc.flags.on_change("menuOpacity", value => {
         document.body.style.setProperty('--menu-opacity',value);

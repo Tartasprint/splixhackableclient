@@ -2830,6 +2830,52 @@ class LeftStats {
 	}
 }
 
+class Leaderboard {
+	/**
+	 * @type {HTMLTableSectionElement}
+	 */
+	body;
+	/**
+	 * @type {HTMLElement}
+	 */
+	container;
+	/**
+	 * The in game leaderboard.
+	 * @param {HTMLElement} container 
+	 */
+	constructor(container) {
+		this.body = document.createElement("tbody");
+		const table = document.createElement("table");
+		table.appendChild(this.body);
+		this.container = container;
+		this.container.appendChild(table);
+	}
+
+	update(records){
+		let rows = [];
+		for(const {rank, name, score} of records) {
+			//create table row
+			const tr = document.createElement("tr");
+			tr.className = "scoreRank";
+			const rankElem = document.createElement("td");
+			rankElem.innerHTML = "#" + rank;
+			tr.appendChild(rankElem);
+			const nameElem = document.createElement("td");
+			nameElem.innerHTML = filter(htmlEscape(thisPlayerName));
+			tr.appendChild(nameElem);
+			const scoreElem = document.createElement("td");
+			scoreElem.innerHTML = thisPlayerScore;
+			tr.appendChild(scoreElem);
+			rows.push(tr);
+		}
+		this.body.replaceChildren(...rows);
+	}
+
+	set_visibility(visibility) {
+		this.container.style.display = visibility ? "none" : null;
+	}
+}
+
 class QualityUI {
 	/** @type {HTMLElement} */
 	element;
@@ -3258,52 +3304,52 @@ class RenderingLoop {
 					}
 
 					if (lastStatCounter === 0) {
-						if (lastStat.no1_time <= 0 && bestStat.no1_time <= 0) {
+						if (last_stat.no1_time <= 0 && best_stat.no1_time <= 0) {
 							lastStatCounter++;
 						} else {
-							lastStatValueElem.innerHTML = parseTimeToString(lastStat.no1_time) + " on #1";
-							bestStatValueElem.innerHTML = parseTimeToString(bestStat.no1_time) + " on #1";
+							lastStatValueElem.innerHTML = parseTimeToString(last_stat.no1_time) + " on #1";
+							bestStatValueElem.innerHTML = parseTimeToString(best_stat.no1_time) + " on #1";
 						}
 					}
 					if (lastStatCounter == 1) {
-						if (lastStatKiller === "" && lastStatKiller.replace(/\s/g, "").length > 0) {
+						if (last_stat_killer === "" && last_stat_killer.replace(/\s/g, "").length > 0) {
 							lastStatCounter++;
 						} else {
-							lastStatValueElem.innerHTML = "killed by " + filter(htmlEscape(lastStatKiller));
+							lastStatValueElem.innerHTML = "killed by " + filter(htmlEscape(last_stat_killer));
 							bestStatValueElem.innerHTML = "";
 						}
 					}
 					if (lastStatCounter == 2) {
-						if (lastStat.kills <= 0 && bestStat.kills <= 0) {
+						if (last_stat.kills <= 0 && best_stat.kills <= 0) {
 							lastStatCounter++;
 						} else {
-							const killsS = lastStat.kills == 1 ? "" : "s";
-							lastStatValueElem.innerHTML = lastStat.kills + " player" + killsS + " killed";
-							const killsS2 = bestStat.kills == 1 ? "" : "s";
-							bestStatValueElem.innerHTML = bestStat.kills + " player" + killsS2 + " killed";
+							const killsS = last_stat.kills == 1 ? "" : "s";
+							lastStatValueElem.innerHTML = last_stat.kills + " player" + killsS + " killed";
+							const killsS2 = best_stat.kills == 1 ? "" : "s";
+							bestStatValueElem.innerHTML = best_stat.kills + " player" + killsS2 + " killed";
 						}
 					}
 					if (lastStatCounter == 3) {
-						lastStatValueElem.innerHTML = parseTimeToString(lastStat.alive) + " alive";
+						lastStatValueElem.innerHTML = parseTimeToString(last_stat.alive) + " alive";
 						bestStatValueElem.innerHTML =
-							parseTimeToString(Math.max(lastStat.alive, localStorage.getItem("bestStatAlive"))) + " alive";
+							parseTimeToString(Math.max(last_stat.alive, localStorage.getItem("bestStatAlive"))) + " alive";
 					}
 					if (lastStatCounter == 4) {
-						if (lastStat.blocks <= 0 && bestStat.blocks <= 0) {
+						if (last_stat.blocks <= 0 && best_stat.blocks <= 0) {
 							lastStatCounter++;
 						} else {
-							const blockS = lastStat.blocks == 1 ? "" : "s";
-							lastStatValueElem.innerHTML = lastStat.blocks + " block" + blockS + " captured";
-							const blockS2 = bestStat.blocks == 1 ? "" : "s";
-							bestStatValueElem.innerHTML = bestStat.blocks + " block" + blockS2 + " captured";
+							const blockS = last_stat.blocks == 1 ? "" : "s";
+							lastStatValueElem.innerHTML = last_stat.blocks + " block" + blockS + " captured";
+							const blockS2 = best_stat.blocks == 1 ? "" : "s";
+							bestStatValueElem.innerHTML = best_stat.blocks + " block" + blockS2 + " captured";
 						}
 					}
 					if (lastStatCounter == 5) {
-						if (lastStat.leaderboard_rank <= 0 && bestStat.leaderboard_rank <= 0) {
+						if (last_stat.leaderboard_rank <= 0 && best_stat.leaderboard_rank <= 0) {
 							lastStatCounter = 0;
 						} else {
-							lastStatValueElem.innerHTML = lastStat.leaderboard_rank == 0 ? "" : "#" + lastStat.leaderboard_rank + " highest rank";
-							bestStatValueElem.innerHTML = bestStat.leaderboard_rank == 0 ? "" : "#" + bestStat.leaderboard_rank + " highest rank";
+							lastStatValueElem.innerHTML = last_stat.leaderboard_rank == 0 ? "" : "#" + last_stat.leaderboard_rank + " highest rank";
+							bestStatValueElem.innerHTML = best_stat.leaderboard_rank == 0 ? "" : "#" + best_stat.leaderboard_rank + " highest rank";
 						}
 					}
 				}
@@ -4165,50 +4211,50 @@ class OneGame extends EventTarget {
 
 	update_you_ded(data){
 		if (data.length > 1) {
-			lastStat.blocks = bytesToInt(data[1], data[2], data[3], data[4]);
-			if (lastStat.blocks > bestStat.blocks) {
-				bestStat.blocks = lastStat.blocks;
-				lsSet("bestStatBlocks", bestStat.blocks);
+			last_stat.blocks = bytesToInt(data[1], data[2], data[3], data[4]);
+			if (last_stat.blocks > best_stat.blocks) {
+				best_stat.blocks = last_stat.blocks;
+				lsSet("bestStatBlocks", best_stat.blocks);
 			}
-			lastStat.kills = bytesToInt(data[5], data[6]);
-			if (lastStat.kills > bestStat.kills) {
-				bestStat.kills = lastStat.kills;
-				lsSet("bestStatKills", bestStat.kills);
+			last_stat.kills = bytesToInt(data[5], data[6]);
+			if (last_stat.kills > best_stat.kills) {
+				best_stat.kills = last_stat.kills;
+				lsSet("bestStatKills", best_stat.kills);
 			}
-			lastStat.leaderboard_rank = bytesToInt(data[7], data[8]);
-			if ((lastStat.leaderboard_rank < bestStat.leaderboard_rank || bestStat.leaderboard_rank <= 0) && lastStat.leaderboard_rank > 0) {
-				bestStat.leaderboard_rank = lastStat.leaderboard_rank;
-				lsSet("bestStatLbRank", bestStat.leaderboard_rank);
+			last_stat.leaderboard_rank = bytesToInt(data[7], data[8]);
+			if ((last_stat.leaderboard_rank < best_stat.leaderboard_rank || best_stat.leaderboard_rank <= 0) && last_stat.leaderboard_rank > 0) {
+				best_stat.leaderboard_rank = last_stat.leaderboard_rank;
+				lsSet("bestStatLbRank", best_stat.leaderboard_rank);
 			}
-			lastStat.alive = bytesToInt(data[9], data[10], data[11], data[12]);
-			if (lastStat.alive > bestStat.alive) {
-				bestStat.alive = lastStat.alive;
-				lsSet("bestStatAlive", bestStat.alive);
+			last_stat.alive = bytesToInt(data[9], data[10], data[11], data[12]);
+			if (last_stat.alive > best_stat.alive) {
+				best_stat.alive = last_stat.alive;
+				lsSet("bestStatAlive", best_stat.alive);
 			}
-			lastStat.no1_time = bytesToInt(data[13], data[14], data[15], data[16]);
-			if (lastStat.no1_time > bestStat.no1_time) {
-				bestStat.no1_time = lastStat.no1_time;
-				lsSet("bestStatNo1Time", bestStat.no1_time);
+			last_stat.no1_time = bytesToInt(data[13], data[14], data[15], data[16]);
+			if (last_stat.no1_time > best_stat.no1_time) {
+				best_stat.no1_time = last_stat.no1_time;
+				lsSet("bestStatNo1Time", best_stat.no1_time);
 			}
-			lastStatDeathType = data[17];
-			lastStatKiller = "";
+			last_stat_death_type = data[17];
+			last_stat_killer = "";
 			document.getElementById("lastStats").style.display = null;
 			document.getElementById("bestStats").style.display = null;
 			lastStatCounter = 0;
 			lastStatTimer = 0;
 			lastStatValueElem.innerHTML = bestStatValueElem.innerHTML = "";
-			switch (lastStatDeathType) {
+			switch (last_stat_death_type) {
 				case 1:
 					if (data.length > 18) {
 						const nameBytes = data.subarray(18, data.length);
-						lastStatKiller = Utf8ArrayToStr(nameBytes);
+						last_stat_killer = Utf8ArrayToStr(nameBytes);
 					}
 					break;
 				case 2:
-					lastStatKiller = "the wall";
+					last_stat_killer = "the wall";
 					break;
 				case 3:
-					lastStatKiller = "yourself";
+					last_stat_killer = "yourself";
 					break;
 			}
 		}
@@ -4255,37 +4301,28 @@ class OneGame extends EventTarget {
 
 	update_leaderboard(total_players,data){
 		data=Uint8Array.from(data);
-		leaderboardElem.innerHTML = "";
 		this.#state.total_players = total_players;
 		this.update_stats(false);
 		let i = 0;
 		let rank = 1;
+		const rows = [];
 		while (true) {
 			if (i >= data.length) {
 				break;
 			}
-			const thisPlayerScore = bytesToInt(data[i], data[i + 1], data[i + 2], data[i + 3]);
-			const nameLen = data[i + 4];
-			const nameBytes = data.subarray(i + 5, i + 5 + nameLen);
-			const thisPlayerName = Utf8ArrayToStr(nameBytes);
-
-			//create table row
-			const tr = document.createElement("tr");
-			tr.className = "scoreRank";
-			const rankElem = document.createElement("td");
-			rankElem.innerHTML = "#" + rank;
-			tr.appendChild(rankElem);
-			const nameElem = document.createElement("td");
-			nameElem.innerHTML = filter(htmlEscape(thisPlayerName));
-			tr.appendChild(nameElem);
-			const scoreElem = document.createElement("td");
-			scoreElem.innerHTML = thisPlayerScore;
-			tr.appendChild(scoreElem);
-			leaderboardElem.appendChild(tr);
-
-			i = i + 5 + nameLen;
+			const score = bytesToInt(data[i], data[i + 1], data[i + 2], data[i + 3]);
+			const name_len = data[i + 4];
+			const name_bytes = data.subarray(i + 5, i + 5 + name_len);
+			const name = Utf8ArrayToStr(name_bytes);
+			rows.push({
+				rank: rank,
+				name: name,
+				score: score,
+			});
+			i = i + 5 + name_len;
 			rank++;
 		}
+		leaderboard_ui.update(rows);
 		if (this.#state.total_players < 30 && doRefreshAfterDie && closeNotification === null) {
 			closeNotification = new TopNotification("This server is about to close, refresh to join a full server.");
 		}
@@ -4410,11 +4447,11 @@ let rendering_loop;
 let quality_ui;
 /** @type {UglyUI} */
 let ugly_ui;
-
+/** @type {Leaderboard} */
+let leaderboard_ui;
 let logger = null;
 var beginScreenVisible = true;
 var canvasQuality = 1, zoom, uglyMode = false;
-var leaderboardElem, leaderboardDivElem, leaderboardHidden = localStorage.leaderboardHidden == "true";
 var playUI,
 	beginScreen,
 	notificationElem,
@@ -4433,10 +4470,10 @@ var lastMyPosSetClientSideTime = 0,
 	lastMyPosSetValidClientSideTime = 0,
 	lastMyPosHasBeenConfirmed = false;
 var uiElems = [];
-let lastStat = new Stats();
-let lastStatDeathType = 0,
-	lastStatKiller = "";
-let bestStat = new Stats();
+let last_stat = new Stats();
+let last_stat_death_type = 0,
+	last_stat_killer = "";
+let best_stat = new Stats();
 var lastStatTimer = 0, lastStatCounter = 0, lastStatValueElem, bestStatValueElem;
 var joinButton,
 	gamemodeDropDownEl;
@@ -4775,12 +4812,11 @@ window.addEventListener('load', function () {
 	bestStatValueElem = document.getElementById("bestStatsRight");
 	joinButton = document.getElementById("joinButton");
 
-	leaderboardElem = document.createElement("tbody");
-	const table = document.createElement("table");
-	table.appendChild(leaderboardElem);
-	leaderboardDivElem = document.getElementById("leaderboard");
-	leaderboardDivElem.appendChild(table);
-	uiElems.push(leaderboardDivElem);
+	leaderboard_ui = new Leaderboard(document.getElementById("leaderboard"));
+	leaderboard_ui.set_visibility(
+		localStorage.leaderboardHidden == "true",
+	);
+	uiElems.push(leaderboard_ui.container);
 	beginScreen = document.getElementById("beginScreen");
 	playUI = document.getElementById("playUI");
 	uiElems.push(document.getElementById("scoreBlock"));
@@ -4810,14 +4846,12 @@ window.addEventListener('load', function () {
 		return false;
 	};
 
-	setLeaderboardVisibility();
-
 	//best stats
-	bestStat.blocks = Math.max(bestStat.blocks, localStorage.getItem("bestStatBlocks"));
-	bestStat.kills = Math.max(bestStat.kills, localStorage.getItem("bestStatKills"));
-	bestStat.leaderboard_rank = Math.max(bestStat.leaderboard_rank, localStorage.getItem("bestStatLbRank"));
-	bestStat.alive = Math.max(bestStat.alive, localStorage.getItem("bestStatAlive"));
-	bestStat.no1_time = Math.max(bestStat.no1_time, localStorage.getItem("bestStatNo1Time"));
+	best_stat.blocks = Math.max(best_stat.blocks, localStorage.getItem("bestStatBlocks"));
+	best_stat.kills = Math.max(best_stat.kills, localStorage.getItem("bestStatKills"));
+	best_stat.leaderboard_rank = Math.max(best_stat.leaderboard_rank, localStorage.getItem("bestStatLbRank"));
+	best_stat.alive = Math.max(best_stat.alive, localStorage.getItem("bestStatAlive"));
+	best_stat.no1_time = Math.max(best_stat.no1_time, localStorage.getItem("bestStatNo1Time"));
 
 	initServerSelection();
 
@@ -5645,8 +5679,4 @@ function getDtCap(index) {
 
 function updateUglyMode() {
 	uglyMode = localStorage.uglyMode == "true";
-}
-
-function setLeaderboardVisibility() {
-	leaderboardDivElem.style.display = leaderboardHidden ? "none" : null;
 }
