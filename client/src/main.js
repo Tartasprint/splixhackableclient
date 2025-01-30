@@ -57,6 +57,17 @@ const sendAction = Object.freeze({
 	PATREON_CODE: 12,
 });
 
+/**
+ * Possible move directions.
+ */
+const Direction = {
+    RIGHT: 0,
+    DOWN: 1,
+    LEFT: 2,
+    UP: 3,
+    PAUSE: 4,
+}
+
 const colors = {
 	grey: {
 		BG: "#3a342f",
@@ -212,6 +223,27 @@ const colorBox = (elem, mainColor, edgeColor) => {
 		"4px 4px " + edgeColor + "," +
 		"5px 5px " + edgeColor + "," +
 		"10px 30px 80px rgba(0,0,0,0.3)";
+}
+
+/**
+ * Add a style section
+ * @param {string} styleStr A CSS document
+ */
+const addStyle = styleStr => {
+    const style = document.createElement('style');
+    style.textContent = styleStr;
+    document.head.append(style);
+}
+
+/**
+ * Add some content to the first match of the selector.
+ * @param {string} htmlStr content
+ * @param {string} selector css selector
+ */
+const addHTML = (htmlStr, selector) => {
+    var template = document.createElement('template');
+    template.innerHTML = htmlStr.trim();
+    document.querySelector(selector).appendChild(template.content);
 }
 
 const titleLines = [
@@ -2861,10 +2893,10 @@ class Leaderboard {
 			rankElem.innerHTML = "#" + rank;
 			tr.appendChild(rankElem);
 			const nameElem = document.createElement("td");
-			nameElem.innerHTML = filter(htmlEscape(thisPlayerName));
+			nameElem.innerHTML = filter(htmlEscape(name));
 			tr.appendChild(nameElem);
 			const scoreElem = document.createElement("td");
-			scoreElem.innerHTML = thisPlayerScore;
+			scoreElem.innerHTML = score;
 			tr.appendChild(scoreElem);
 			rows.push(tr);
 		}
@@ -3879,20 +3911,6 @@ class OneGame extends EventTarget {
 						}
 				});
 			};
-			const that = this;
-			this.updater = new Proxy({},{
-				get(_t,p,_r){
-					return (function u(...args){
-						db.transaction(["recording_data"], "readwrite").objectStore("recording_data").add({
-							time: Date.now(),
-							recording: that.listing,
-							call: p,
-							args: args,
-						});
-						(that["update_"+p].bind(that))(...args);
-					});
-				}
-			})
 		} else {
 			connection_worker.postMessage({
 					request: "start_connection",
@@ -4700,6 +4718,30 @@ function generateServerLocation(originalLocationObj) {
 	};
 }
 
+const ergomoves = [];
+function activateDir(d){
+    const index = ergomoves.indexOf(d);
+    if(index < 0) {
+        ergomoves.push(d);
+        one_game.sendDir(d);
+    }
+}
+
+function deactivateDir(d){
+    const index = ergomoves.indexOf(d);
+    ergomoves.splice(index,1);
+    if(ergomoves.length > 0){
+        for(const dir of ergomoves){
+            one_game.sendDir(dir);
+        }
+    }
+}
+
+function showTopNotification(text, timeAlive = 4) {
+    var notification = doTopNotification(text);
+    setTimeout(function () { notification.animateOut(); notification.destroy(); }, timeAlive * 1000);
+}
+
 function startPingServers() {
 	for (const server of servers) {
 		server.initSocket();
@@ -4770,6 +4812,12 @@ function nameInputOnChange() {
 
 //when page is finished loading
 window.addEventListener('load', function () {
+	window.CSS.registerProperty({
+		name: "--menu-opacity",
+		syntax: "<number>",
+		inherits: true,
+		initialValue: "0.7",
+	  });
 	rendering_loop = new RenderingLoop();
 	input_handler  = new InputHanlder(
 		game_state,
@@ -4993,12 +5041,12 @@ function resetAll() {
 	connection_worker.postMessage({
 		request: "close_connection",
 	});
-	if(one_game.listing){
+	/* if(one_game.listing){
 		const option = document.createElement('option');
 		option.value = one_game.listing;
 		option.text = "Replay #" + one_game.listing;
 		document.getElementById("replayGroup").append(option);
-	}
+	} */
 	one_game = null;
 	game_state.reset();
 	main_canvas.reset();

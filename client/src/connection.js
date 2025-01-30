@@ -437,6 +437,7 @@ class GameConnection {
 
     post(data){
         self.postMessage(data);
+		/*
         if(this.replay !== "recording") return;
         if(!data.call) return;
 		if(data.call === "player_honk"){
@@ -454,6 +455,7 @@ class GameConnection {
 				args: data.args,
 			});
 		}
+		*/
     }
 
 	//#region Server communication

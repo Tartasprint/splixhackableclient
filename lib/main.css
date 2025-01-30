@@ -1,7 +1,0 @@
-body[data-state="playing"] .hc-menu-container {
-    opacity: var(--menu-opacity);
-}
-
-.search-negative {
-	display: none;
-}
